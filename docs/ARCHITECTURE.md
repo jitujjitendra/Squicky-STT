@@ -137,6 +137,18 @@ At Stage 1 (Hostinger / near-zero budget), the backend may be too weak to run he
 
 Because both sit behind the same `TranscriptionEngine` interface, *where* transcription happens is a configuration choice, not an architectural one.
 
+**Compute placement decision logic (auto-resolved at runtime):**
+
+| Condition | Compute placement | Rationale |
+|-----------|-------------------|-----------|
+| No server worker available (Hostinger/static only) | Client-side (WASM or Web Speech) | Only option |
+| User's device is low-end (mobile, <4GB RAM) | Server-side (if available) | WASM would be too slow/crash |
+| User explicitly chooses "Process locally" | Client-side | Privacy preference respected |
+| File > 15 min and server worker exists | Server-side | CPU WASM too slow for long audio |
+| Live mic recording | Client-side (Web Speech API) | Lowest latency, zero server cost |
+
+The platform detects device capabilities (RAM via `navigator.deviceMemory`, connection type) and server availability at init, then auto-selects the best path. A manual toggle ("Process on device / Process on server") is always visible for user override.
+
 ---
 
 ## 4. Module Architecture
@@ -157,7 +169,7 @@ This means a new module is *additive*: new route + new UI + new processor regist
 |---|--------|----------|----------|----------------------------------------|
 | 1 | **Speech Engine** | audio/video | standard transcript (text, segments, timestamps, speakers?) | Yes (CPU/WASM, short audio) |
 | 2 | **Transcript Studio** | transcript | edited transcript, search, find/replace, speaker labels | Yes (client-side editing) |
-| 3 | **Export Center** | transcript / outputs | TXT, MD, DOCX, JSON, PDF | Yes (mostly client-side) |
+| 3 | **Export Center** | transcript / outputs | TXT, MD, DOCX, PDF, SRT, VTT, CSV, JSON | Yes (mostly client-side) |
 | 4 | **Subtitle Studio** | transcript + timestamps | SRT, VTT, styled captions, segment timing | Yes |
 | 5 | **Content Studio** | transcript | summaries, key points, blog/social drafts | Partial — needs a text model (see 4.6) |
 | 6 | **Meeting Intelligence** | transcript + speakers | action items, decisions, topics, minutes | Partial — needs diarization + text model |
@@ -241,6 +253,76 @@ The pipeline orchestrator: after transcription, it publishes a "transcript ready
 | Paid LLM API | $$ | Best | Funded upgrade |
 
 Same abstraction discipline applies: a `TextIntelligenceProvider` interface so the summarizer/extractor is swappable just like the speech engine.
+
+**TextIntelligenceProvider contract:**
+
+```
+TextIntelligenceProvider
+  capabilities() -> { summarization, extraction, generation, max_input_tokens?, languages[] }
+  process(transcript_text: string, task: TaskType, options?) -> IntelligenceResult
+
+TaskType: "summarize" | "extract_actions" | "extract_faq" | "generate_blog" | "generate_social" | ...
+
+IntelligenceResult {
+  task: TaskType,
+  output: string | StructuredOutput,
+  confidence?: number,
+  meta: { provider_name, model?, generated_at }
+}
+```
+
+**Adapters (initial set):**
+- `ExtractiveProvider` — TF-IDF/TextRank, zero-cost, CPU-cheap. Stage 1 default.
+- `LocalModelProvider` — quantized instruct model via `llama.cpp`/`Ollama`. CPU-heavy but free. Stage 1 optional.
+- `CloudLLMProvider` (disabled by default) — OpenAI/Anthropic/open-router slot for when budget exists.
+
+**Capability detection.** Modules check `capabilities()` before requesting a task. If the active provider lacks `generation`, Content Studio falls back to extractive summaries instead of blog drafts. Same graceful-degradation pattern as the Speech Engine.
+
+### 4.7 Processor dependency and execution ordering
+
+Processors may depend on each other or on engine capabilities. The pipeline orchestrator resolves execution order:
+
+```
+Processor
+  id, name,
+  requires: { diarization?, word_timestamps?, language? },
+  depends_on?: [processor_id],        # other processors that must run first
+  run(transcript, context, options) -> ProcessorResult
+```
+
+**Execution rules:**
+1. Processors declare `depends_on` (e.g. Meeting Intelligence depends on diarization output).
+2. The orchestrator builds a DAG (directed acyclic graph) of requested processors and runs them in topological order.
+3. If a dependency is unavailable (engine lacks capability or upstream processor failed), the processor either degrades gracefully or skips with a clear status message.
+4. At Stage 1 (single CPU), execution is sequential in DAG order. At Stage 2+, independent branches run in parallel.
+
+**Partial failure handling:** If chunk 15/20 of a transcription fails, the worker retries *only that chunk* (up to 3 attempts). If retries exhaust, partial results (chunks 1–14, 16–20) are delivered with a gap marker and a clear "partial result" flag in the response — the user sees what succeeded and knows what's missing.
+
+### 4.8 StandardTranscript schema versioning
+
+The `StandardTranscript` schema will evolve (new optional fields, richer metadata). Backward compatibility strategy:
+
+- Schema carries a `schema_version` field (semver, e.g. `"1.0.0"`).
+- **Additive-only changes** (new optional fields) = minor version bump. All existing consumers continue working unchanged.
+- **Breaking changes** (field removal, type change) = major version bump. Old adapters must be updated. In practice, we avoid breaking changes by keeping fields optional.
+- Processors declare the minimum `schema_version` they require. The platform validates compatibility before running.
+
+### 4.9 Client-side WASM model loading strategy
+
+WASM-based transcription (e.g. `whisper.cpp` compiled to WASM) requires downloading large model files to the browser:
+
+| Model | Size (approx.) | Accuracy | Use case |
+|-------|----------------|----------|----------|
+| tiny  | ~40 MB  | Low     | Quick demo, testing |
+| base  | ~75 MB  | Moderate | Default for short audio |
+| small | ~240 MB | Good    | When accuracy matters |
+
+**Loading strategy:**
+1. **Lazy download:** model is NOT bundled with the app. Downloaded on first use only, with clear progress UI ("Downloading speech model: 45%...").
+2. **Cache via Service Worker + Cache API:** once downloaded, model is cached in the browser's Cache Storage. Subsequent visits load instantly from cache.
+3. **Progressive upgrade:** start with `tiny` for instant first experience; offer a "Download better model" option for users who want accuracy.
+4. **Fallback:** if user cancels download or device has insufficient memory (<2GB free), fall back to Web Speech API (Chrome) with a disclosure that audio is processed via Google.
+5. **Storage budget check:** before downloading, check `navigator.storage.estimate()` and warn if space is tight.
 
 ---
 
@@ -369,7 +451,7 @@ CPU transcription is slow; a 30-minute file can take minutes. Every long operati
 
 ### 7.4 Stage-1 protection (single CPU reality)
 
-- Hard **duration/size caps** (e.g. start at ~30–60 min) so one upload can't choke the box.
+- Hard **duration/size caps** (Stage 1: **max 60 minutes per file**) so one upload can't choke the box.
 - **Low concurrency cap** + queue backpressure: process serially or in a tiny worker pool.
 - Clear UX messaging: "queued — we'll show your result here" instead of pretending it's instant.
 
@@ -444,7 +526,7 @@ Every choice is justified, with limitations and an upgrade path.
 | **Processing Layer** | `faster-whisper` (CPU now / GPU later) + `whisper.cpp` (incl. WASM); FFmpeg for media | Best free speed/cost balance; self-host = genuine zero-retention; WASM enables client-side | CPU is slow on long audio; small models = lower Hinglish accuracy | GPU worker; larger models (`large-v3`); cloud adapter when funded |
 | **Storage Layer** | `/tmp` (temp audio) + short-TTL store for results; Postgres/SQLite for *non-user* metadata only | Matches no-permanent-storage; cheap | No history/resume by design | Object store (S3-compatible) with lifecycle auto-delete |
 | **Queue Layer** | Single Redis (or DB-backed queue at the very smallest) | Simple, cheap, supports jobs + progress + TTL results | Single point at Stage 1 | Redis cluster / managed queue (Stage 3) |
-| **Export Layer** | Client-side generation where possible (TXT/MD/SRT/VTT/JSON); server for DOCX/PDF if needed | Keeps data on the client, reduces server cost | Heavy formats need server | Server-side rendering service if volume grows |
+| **Export Layer** | Client-side generation where possible (TXT/MD/SRT/VTT/CSV/JSON); server for DOCX/PDF if needed | Keeps data on the client, reduces server cost | Heavy formats need server | Server-side rendering service if volume grows |
 | **State Management** | React Query (server/job state) + lightweight store (Zustand) for UI | Job polling/caching fits React Query; Zustand avoids Redux boilerplate | — | Same pattern scales |
 | **Deployment Strategy** | Stage 1: static client + light API on Hostinger/cheap VPS; heavy compute client-side or on one small worker | Lowest cost to launch | Shared hosting can't run heavy ML server-side | Containerize; split client / API / worker nodes (Stage 2+) |
 | **Monitoring Strategy** | Structured logs + basic metrics (queue depth, job duration, failures); free/self-hosted (e.g. Prometheus/Grafana or hosted free tier) from day 1 | You cannot scale what you can't see; queue/GPU bottlenecks need early visibility | Self-hosting monitoring adds a little ops | Managed observability + tracing at Stage 3 |
