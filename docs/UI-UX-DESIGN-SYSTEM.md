@@ -167,7 +167,7 @@ The upload zone IS the homepage. When no transcript is loaded, the entire main w
 |       |   [Browse Files]  [Record]       |       |
 |       |                                  |       |
 |       |   MP3, WAV, FLAC, OGG, M4A      |       |
-|       |   Max duration: 2 hours          |       |
+|       |   Max duration: 60 minutes       |       |
 |       +----------------------------------+       |
 |                                                  |
 |   All processing happens locally in your         |
@@ -293,6 +293,8 @@ The upload zone IS the homepage. When no transcript is loaded, the entire main w
 | Social  | Platform-sized snippets (tweet, LinkedIn post)   |
 
 Each tab has a [Regenerate] button and [Copy] / [Export] buttons.
+
+> **Note on "Regenerate":** At Stage 1 (extractive mode), "Regenerate" re-runs the extraction algorithm with slightly varied parameters (different sentence weighting, length target) to produce an alternative output. It does NOT imply generative AI. When a generative provider is available (Stage 2+), it triggers a full re-generation.
 
 ### 3.5 Meeting Intelligence UI
 
@@ -420,7 +422,7 @@ All fields are editable before export. The platform extracts initial values from
 |  [ ] Meeting Notes [ ] All Outputs                              |
 |                                                                  |
 |  STEP 2: Select Format                                           |
-|  [TXT] [DOCX] [PDF] [SRT] [VTT] [CSV] [JSON]                  |
+|  [TXT] [MD] [DOCX] [PDF] [SRT] [VTT] [CSV] [JSON]             |
 |   (active chips highlighted; unavailable ones grayed out)        |
 |                                                                  |
 |  STEP 3: Options                                                 |
@@ -438,6 +440,87 @@ All fields are editable before export. The platform extracts initial values from
 - Format chips are contextually enabled (SRT/VTT only available when subtitles are selected).
 - "All Outputs" checkbox selects everything with a bundled ZIP download.
 - Quick export shortcut is available from every module toolbar via an [Export] button that opens a pre-filled Export Center with the current module's output selected.
+
+#### Export Format Availability Matrix
+
+| Output selected | TXT | MD | DOCX | PDF | SRT | VTT | CSV | JSON |
+|-----------------|-----|----|------|-----|-----|-----|-----|------|
+| Transcript      | ✓   | ✓  | ✓    | ✓   | ✗   | ✗   | ✗   | ✓    |
+| Subtitles       | ✗   | ✗  | ✗    | ✗   | ✓   | ✓   | ✗   | ✓    |
+| Summary         | ✓   | ✓  | ✓    | ✓   | ✗   | ✗   | ✗   | ✓    |
+| Meeting Notes   | ✓   | ✓  | ✓    | ✓   | ✗   | ✗   | ✓   | ✓    |
+| Action Items    | ✓   | ✓  | ✓    | ✗   | ✗   | ✗   | ✓   | ✓    |
+| All Outputs     | ZIP bundle containing all available formats                    |
+
+### 3.9 Module Degraded & Error States
+
+When a module cannot fully function (e.g. engine lacks diarization, text-intelligence fails, or capability is unavailable at Stage 1), the UI must handle this gracefully instead of showing a broken or empty view.
+
+#### Degraded State Design
+
+```
++------------------------------------------------------------------+
+|                                                                  |
+|  [Info icon]  Limited functionality available                    |
+|                                                                  |
+|  [Explanation of what's limited and why]                         |
+|  "Speaker detection is not available with the current engine.    |
+|   Meeting notes will show content without speaker attribution."  |
+|                                                                  |
+|  [Continue anyway]              [Learn more]                     |
+|                                                                  |
++------------------------------------------------------------------+
+```
+
+#### Per-Module Degraded States
+
+| Module | Degraded condition | UI behavior |
+|--------|-------------------|-------------|
+| Meeting Intelligence | Diarization unavailable | Show all content as single speaker; info banner: "Speaker detection unavailable — all content shown as one participant" |
+| Meeting Intelligence | Text-intelligence failed | Show raw transcript segments; skip action-items/decisions extraction; offer manual entry |
+| Content Studio | Extractive algo produces low-quality output | Show output with a "Quality: Basic" badge; suggest uploading clearer audio |
+| Content Studio | Text-intelligence provider unavailable | Show transcript with manual copy; disable Summary/Blog/FAQ tabs with tooltip: "This feature requires a text-processing engine" |
+| Creator Studio | No clear topic boundaries detected | Show single chapter "Full Recording"; allow manual chapter creation |
+| Business Studio | Cannot extract structured info | Show raw transcript + empty editable fields for user to fill manually |
+| Subtitle Studio | No word-level timestamps from engine | Generate subtitles at segment-level (less precise); info banner: "Timing is approximate" |
+
+#### Error State Design (processing failure)
+
+```
++------------------------------------------------------------------+
+|                                                                  |
+|  [Warning icon - red]                                            |
+|                                                                  |
+|  Processing failed for this module                               |
+|                                                                  |
+|  "Summary generation encountered an error. Your transcript       |
+|   is still available in Transcript Studio."                      |
+|                                                                  |
+|  [Retry]   [Go to Transcript]   [Report issue]                  |
+|                                                                  |
++------------------------------------------------------------------+
+```
+
+**Rules:**
+- Never show a completely blank/broken screen. Always provide context + next action.
+- Transcript (core output) is always available even if downstream modules fail.
+- "Retry" attempts the processor again. "Go to Transcript" navigates to the reliable fallback.
+
+### 3.10 Keyboard Shortcuts
+
+| Shortcut | Action | Context |
+|----------|--------|---------|
+| `Space` | Play / Pause audio | Transcript Studio, Subtitle Studio |
+| `Ctrl/Cmd + F` | Open Find | Transcript Studio |
+| `Ctrl/Cmd + H` | Open Find & Replace | Transcript Studio |
+| `Ctrl/Cmd + E` | Quick Export (current module output) | Any module |
+| `Ctrl/Cmd + S` | Download/Save current output | Any module |
+| `Ctrl/Cmd + 1-8` | Switch to module 1-8 | Global |
+| `[` / `]` | Previous / Next subtitle cue | Subtitle Studio |
+| `Escape` | Close overlay / exit edit mode | Global |
+| `Ctrl/Cmd + Shift + D` | Toggle dark/light theme | Global |
+
+Shortcuts are displayed in tooltips and in a "Keyboard shortcuts" help modal (accessible via `?` key).
 
 ---
 
@@ -695,6 +778,41 @@ Design: Centered vertically and horizontally. Icon (48px, muted), headline (18px
 
 Skeleton screens mimic the final layout shape so the transition to loaded content feels seamless.
 
+### 5.10 Animation & Transition Tokens
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--duration-instant` | 100ms | Tooltips, focus rings |
+| `--duration-fast` | 150ms | Button state changes, toggles |
+| `--duration-normal` | 250ms | Panel collapse/expand, tab switch |
+| `--duration-slow` | 350ms | Page transitions, drawer open/close |
+| `--easing-default` | `cubic-bezier(0.4, 0, 0.2, 1)` | General purpose |
+| `--easing-enter` | `cubic-bezier(0, 0, 0.2, 1)` | Elements entering (slide-in) |
+| `--easing-exit` | `cubic-bezier(0.4, 0, 1, 1)` | Elements leaving (slide-out) |
+
+**Rules:**
+- All transitions use these tokens — no hardcoded durations in component CSS.
+- When `prefers-reduced-motion` is active, all durations become `0ms` (instant).
+- Sidebar collapse: `--duration-normal` + `--easing-default`.
+- Card hover lift: `--duration-fast` + `--easing-default`.
+- Toast slide-in: `--duration-normal` + `--easing-enter`.
+- Modal backdrop fade: `--duration-slow` + `--easing-default`.
+
+### 5.11 Dark Mode Component Specifics
+
+| Component | Light mode | Dark mode |
+|-----------|-----------|-----------|
+| Sidebar | `--neutral-50` bg, `--neutral-700` text | `#12121f` bg, `--neutral-200` text |
+| Cards | White bg, light shadow | `#1e1e32` bg, darker shadow (rgba(0,0,0,0.3)) |
+| Inputs | White bg, `--neutral-300` border | `#1a1a2e` bg, `rgba(255,255,255,0.15)` border |
+| Header | White bg, bottom border `--neutral-200` | `#0f0f1a` bg, bottom border `rgba(255,255,255,0.08)` |
+| Toolbar | `--neutral-50` bg | `#16162a` bg |
+| Upload zone | Dashed `--neutral-300` border, `--neutral-50` bg | Dashed `rgba(255,255,255,0.15)` border, `#12121f` bg |
+| Active nav item | `--color-accent` at 10% opacity bg | `--color-accent` at 15% opacity bg |
+| Code/timestamp | `--neutral-100` bg, monospace | `#1a1a2e` bg, monospace |
+
+**Theme transition:** switching themes applies a `--duration-slow` full-page transition to prevent jarring flashes.
+
 ---
 
 ## 6. Component Library Structure
@@ -927,6 +1045,17 @@ The right panel is a contextual container. Each module defines its own panel con
 - New modules: register a panel component via a provider/slot pattern
 
 When a module does not define panel content, the right panel is hidden (collapsed to 0px).
+
+**Right Panel auto-show/hide rules:**
+
+| Trigger | Panel behavior |
+|---------|----------------|
+| Transcript ready (first time) | Auto-opens to show file info + available outputs |
+| User manually collapses | Stays collapsed (state saved to localStorage) |
+| Switch to a module with panel content | Opens if not manually collapsed |
+| Switch to a module without panel content | Hides (0px) |
+| Mobile / tablet breakpoint | Never auto-opens; available via swipe-left or info icon |
+| Export Center active | Hides (Export Center is full-width workflow) |
 
 ### 8.6 Theme Extensibility
 
