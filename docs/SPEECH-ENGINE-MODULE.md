@@ -310,6 +310,27 @@ All engines fail --> return clear error with reason
 | Speaker separation | Assign each transcript segment a speaker label (Speaker 1, Speaker 2...) |
 | Speaker metadata | Number of speakers detected, speaking time per speaker |
 
+#### Diarization-Transcription Alignment (Critical Design)
+
+Diarization runs **after** transcription (Step 9) and produces speaker time-ranges. These must be aligned with transcript segments:
+
+**The alignment problem:** A transcript segment may contain speech from two speakers (overlapping or turn-taking within a single segment boundary). The schema rule is **one segment = one speaker ALWAYS**.
+
+**Alignment algorithm:**
+1. Diarization produces: `[(spk_001, 0.0-4.2), (spk_002, 4.0-8.5), (spk_001, 8.5-12.0), ...]`
+2. For each transcript segment, check which speaker(s) overlap with it
+3. **Single speaker overlap:** assign `speaker_id` directly
+4. **Multiple speaker overlap within one segment:** SPLIT the segment at the speaker boundary:
+   - Find the word closest to the speaker turn point (using word timestamps if available, else proportional split)
+   - Create two new segments with new UUIDs, each inheriting the appropriate words
+   - Recalculate `sequence_index` for all segments
+5. After splitting, every segment has exactly one `speaker_id`
+
+**Edge cases:**
+- No word timestamps available: split at proportional time point (less accurate, but maintains one-speaker-per-segment rule)
+- Very short segments (<1s) from splitting: merge with adjacent same-speaker segment if gap < 0.3s
+- Overlapping speech (both talking): assign to the speaker with higher energy/volume in that region; accept imperfection
+
 #### Reality Check: Stage 1 Constraints
 
 | Aspect | Stage 1 (CPU) Reality | Future (GPU) |
@@ -323,6 +344,7 @@ All engines fail --> return clear error with reason
 - Enabled only for meeting audio if user explicitly selects it
 - Graceful degradation: if unavailable or too slow, transcript delivers without speaker labels
 - Clear UI messaging: "Speaker detection may take significant time on long recordings"
+- When disabled: `speaker_id` = null for all segments; `speakers` object has count=0
 
 ### 2.7 Chunking Engine
 
@@ -347,6 +369,29 @@ All engines fail --> return clear error with reason
 3. Split at those gaps with 1-2s overlap into adjacent chunks
 4. If no silence gap within 25-35s range, split at lowest-energy point
 5. Never split below 10s (too short for Whisper context)
+
+#### Merge Algorithm (Critical — affects Subtitle Studio timing accuracy)
+
+After all chunks are transcribed, results must be seamlessly merged:
+
+```
+Chunk A output: "...everyone, aaj hum discuss"     (ends at t=30.2s local)
+Chunk B output: "aaj hum discuss karenge..."        (starts at t=0.0s local, offset=29.0s global)
+Overlap region: ~1.2 seconds of duplicated content
+```
+
+**Merge steps:**
+1. **Identify overlap zone:** last N words of chunk A vs first N words of chunk B (N ≈ overlap_duration / avg_word_duration, typically 3-8 words)
+2. **Fuzzy alignment:** use Levenshtein distance / longest common subsequence on the overlap words to find the exact alignment point
+3. **Deduplicate:** keep chunk A's version of all text/timestamps up to alignment point; keep chunk B's version from alignment point onward
+4. **Timestamp correction:** chunk B's timestamps = raw_timestamps + chunk_B_global_offset
+5. **Boundary segment handling:** if the alignment point falls mid-word, round to nearest word boundary
+6. **Failure fallback:** if no alignment found (very rare — happens with heavy noise): concatenate chunks with a 0.5s gap between them and flag the boundary in `processing_flags`
+
+**Merge quality validation:**
+- Check for duplicate words within ±1s of chunk boundary (indicates bad merge)
+- Check for timestamp discontinuities >2s at boundary (indicates missed content)
+- If issues detected: log warning, deliver result with a `merge_artifacts` flag (downstream modules can display "timing may be imprecise at [timestamp]")
 
 ### 2.8 Output Normalizer
 
@@ -409,9 +454,17 @@ User uploads file
     |  Progress: "Transcribing... 3/10 segments"
     v
 [8] MERGE & NORMALIZE
-    |  Merge chunk results, align overlaps, correct timestamps
+    |  Merge chunk results, align overlaps, correct timestamps (see Merge Algorithm in 2.7)
     |  Normalize to StandardTranscript schema
     |  Progress: "Finalizing..."
+    v
+[8b] PUNCTUATION RESTORATION
+    |  Check if engine output includes proper punctuation
+    |  If not (common with some Whisper configs): run lightweight punctuation model
+    |  Options: deepmultilingualpunctuation (free, CPU) or rule-based (faster, less accurate)
+    |  Set processing_flags.punctuation_restored = true/false
+    |  WHY: Content Studio + Meeting Intelligence NLP depends on sentence boundaries
+    |  Progress: (sub-step of finalizing, no separate progress label)
     v
 [9] OPTIONAL: DIARIZATION
     |  If requested + available: run speaker detection
@@ -420,7 +473,17 @@ User uploads file
     v
 [10] OPTIONAL: HINGLISH PROCESSING
      |  If Hinglish: apply transliteration based on user preference
+     |  Generate text_display field (transliterated version)
+     |  text field remains immutable original
      |  Progress: "Processing languages..."
+     v
+[10b] OPTIONAL: TOPIC BOUNDARY DETECTION
+     |  Heuristic signals for Creator Studio chapter generation:
+     |  - Long silence gaps (>2s) between segments = likely topic shift
+     |  - Speaker change after silence = likely new topic
+     |  - Semantic shift detection (Stage 2: NLP-based)
+     |  Stores: segments[].topic_boundary_hint: true/false (optional field)
+     |  Progress: (silent step, no user-visible progress)
      v
 [11] DELIVERY
      |  Store StandardTranscript in short-TTL store (Redis, 15-30 min TTL)
@@ -460,9 +523,20 @@ User clicks Record
     v
 [3] ON STOP
     |  Final transcript assembled from all final results
-    |  Normalize to StandardTranscript schema
-    |  Audio recording (if saved locally by MediaRecorder) available for batch re-processing
+    |  Normalize to StandardTranscript schema (quality_score = null, no word timestamps)
+    |  Audio recording saved by MediaRecorder as WebM/Opus blob in browser memory
     |  Offer: "Reprocess with full engine for better accuracy?"
+    |
+    |  REPROCESSING PATH (if user accepts):
+    |  - WebM blob uploaded to server as a normal batch job
+    |  - Full pipeline runs (preprocessing → chunking → transcription → diarization)
+    |  - New high-quality StandardTranscript replaces the live one
+    |  - All downstream modules get upgraded data automatically
+    |
+    |  REPROCESSING PATH (client-side WASM):
+    |  - WebM blob fed directly to WASM engine in browser
+    |  - No upload needed; full privacy preserved
+    |  - Slower but higher quality than Web Speech API
     v
 [4] PRIVACY NOTE
     |  Web Speech API sends audio to Google servers -- MUST be disclosed to user
@@ -473,13 +547,19 @@ User clicks Record
 
 **Live mode limitations (be transparent):**
 
-| Limitation | Reason | Mitigation |
-|-----------|--------|-----------|
-| Chrome-only | Web Speech API is Chrome/Chromium exclusive | Browser detection + fallback message |
-| No diarization | Live mode has no speaker separation | Offer batch reprocessing after |
-| No word timestamps | Web Speech API provides sentence-level only | Approximate from timing |
-| Privacy concern | Audio sent to Google servers | Clear disclosure + future WASM option |
-| No Hinglish optimization | Web Speech API has limited Hindi support | Suggest batch mode for Hindi/Hinglish |
+| Limitation | Reason | Mitigation | Downstream Impact |
+|-----------|--------|-----------|-------------------|
+| Chrome-only | Web Speech API is Chrome/Chromium exclusive | Browser detection + fallback message | All modules: no live if not Chrome |
+| No diarization | Live mode has no speaker separation | Offer batch reprocessing after | Meeting Intelligence: single-speaker mode |
+| No word timestamps | Web Speech API provides sentence-level only | Approximate from timing (LOW PRECISION) | **Subtitle Studio: cue timing will be imprecise (~2-5s accuracy vs ~0.1s for batch). Show warning: "Subtitles from live recording have approximate timing. Reprocess for precision."** |
+| Privacy concern | Audio sent to Google servers | Clear disclosure + future WASM option | Privacy badge changes to "Processed by Google" |
+| No Hinglish optimization | Web Speech API has limited Hindi support | Suggest batch mode for Hindi/Hinglish | Content Studio: lower quality Hinglish output |
+| No confidence scores | Web Speech API doesn't return per-word confidence | quality_score = null; quality_label = "unknown" | Downstream modules skip confidence-based filtering |
+
+**Critical guidance for downstream modules consuming live transcripts:**
+- Check `transcription_meta.engine_name == "web-speech-api"` to detect live origin
+- If true: disable features requiring word timestamps (precise subtitle timing, word-level highlighting)
+- Offer "Reprocess with full engine" button prominently — batch reprocessing produces full-quality StandardTranscript
 
 ---
 
@@ -491,7 +571,7 @@ The universal output schema consumed by all downstream modules. This is the **si
 
 ```json
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "id": "uuid-v4",
   "created_at": "ISO-8601 timestamp",
 
@@ -512,40 +592,49 @@ The universal output schema consumed by all downstream modules. This is the **si
     "language_detected": "hi+en",
     "language_confidence": 0.87,
     "processing_time_sec": 34.2,
-    "compute_type": "cpu"
+    "compute_type": "cpu",
+    "quality_score": 0.78,
+    "quality_label": "good"
   },
 
   "transcript": {
-    "full_text": "The complete concatenated transcript text...",
+    "full_text": "Hello everyone, aaj hum discuss karenge...",
+    "full_text_note": "PLAIN CONCATENATION of segments[].text with newlines. No speaker labels, no timestamps. For convenience/search only.",
     "language": "multilingual",
     "script": "mixed",
 
     "segments": [
       {
-        "id": 1,
+        "id": "seg_a1b2c3d4",
+        "sequence_index": 0,
         "start": 0.0,
         "end": 4.5,
         "text": "Hello everyone, aaj hum discuss karenge...",
+        "text_display": "Hello everyone, aaj hum discuss karenge...",
         "language": "hi+en",
-        "speaker": "Speaker 1",
+        "speaker_id": "spk_001",
         "confidence": 0.92,
+        "topic_boundary_hint": false,
         "words": [
-          { "word": "Hello", "start": 0.0, "end": 0.4, "confidence": 0.98 },
-          { "word": "everyone", "start": 0.5, "end": 1.1, "confidence": 0.95 },
-          { "word": "aaj", "start": 1.3, "end": 1.5, "confidence": 0.88 },
-          { "word": "hum", "start": 1.6, "end": 1.8, "confidence": 0.90 },
-          { "word": "discuss", "start": 1.9, "end": 2.4, "confidence": 0.94 },
-          { "word": "karenge", "start": 2.5, "end": 3.0, "confidence": 0.85 }
+          { "word": "Hello", "start": 0.0, "end": 0.4, "confidence": 0.98, "language": "en" },
+          { "word": "everyone", "start": 0.5, "end": 1.1, "confidence": 0.95, "language": "en" },
+          { "word": "aaj", "start": 1.3, "end": 1.5, "confidence": 0.88, "language": "hi" },
+          { "word": "hum", "start": 1.6, "end": 1.8, "confidence": 0.90, "language": "hi" },
+          { "word": "discuss", "start": 1.9, "end": 2.4, "confidence": 0.94, "language": "en" },
+          { "word": "karenge", "start": 2.5, "end": 3.0, "confidence": 0.85, "language": "hi" }
         ]
       }
     ],
 
     "speakers": {
       "count": 2,
-      "labels": ["Speaker 1", "Speaker 2"],
+      "entries": [
+        { "id": "spk_001", "label": "Speaker 1", "display_name": null },
+        { "id": "spk_002", "label": "Speaker 2", "display_name": null }
+      ],
       "speaking_time": {
-        "Speaker 1": 145.2,
-        "Speaker 2": 100.4
+        "spk_001": 145.2,
+        "spk_002": 100.4
       }
     }
   },
@@ -553,10 +642,14 @@ The universal output schema consumed by all downstream modules. This is the **si
   "processing_flags": {
     "diarization_applied": true,
     "noise_reduction_applied": true,
+    "punctuation_restored": true,
     "is_partial": false,
     "partial_gap_segments": [],
     "hinglish_detected": true,
-    "transliteration_applied": "roman"
+    "transliteration_applied": "roman",
+    "topic_boundaries_detected": true,
+    "merge_artifacts": false,
+    "live_origin": false
   }
 }
 ```
@@ -566,25 +659,110 @@ The universal output schema consumed by all downstream modules. This is the **si
 | Rule | Description |
 |------|-------------|
 | `segments` array is CORE | Every downstream module consumes this; never empty on success |
+| `segments[].id` is a stable UUID string | Never sequential integers; gaps are impossible; safe for referencing across edits |
+| `segments[].sequence_index` is 0-based position | Use for ordering/display; IDs are for identity, sequence_index is for order |
+| `segments[].text` is immutable original | Always the raw engine output in original script; never modified by transliteration |
+| `segments[].text_display` is the user-visible version | May be transliterated; downstream UI modules use this for display |
+| `segments[].speaker_id` references speakers.entries[].id | Never a raw string; rename = update entry display_name, segments untouched |
 | `words` array is OPTIONAL | Depends on engine capability; null/empty when unavailable |
-| `speaker` field is OPTIONAL | Only populated when diarization is available and enabled |
+| `words[].language` is OPTIONAL | Per-word language tag; available when Hinglish detected (Stage 2+ for accuracy) |
+| `speaker_id` field is OPTIONAL | Only populated when diarization is available and enabled |
 | `confidence` fields are OPTIONAL | Some engines do not provide confidence scores |
+| `quality_score` in meta | Aggregate 0.0-1.0; downstream modules use to gate processing (skip NLP on "poor" input) |
+| `quality_label` in meta | "excellent" (>0.9), "good" (0.7-0.9), "fair" (0.5-0.7), "poor" (<0.5) |
+| `punctuation_restored` flag | Downstream NLP (Content Studio, Meeting Intelligence) checks this before processing |
 | `is_partial` flag | Set to `true` when some chunks failed and gaps exist |
 | `partial_gap_segments` | Lists segment IDs where transcription data is missing |
+| One segment = one speaker ALWAYS | If two speakers overlap in a time range, split into two segments with overlapping timestamps |
 | Schema is additive-only | New optional fields = minor version bump; never remove/rename existing fields |
 | Breaking changes | Major version bump only; all modules must update simultaneously |
 
+### Speaker Identity Architecture (Critical for Downstream Modules)
+
+Speaker data uses an **indirection layer** so downstream modules can rename, merge, or annotate speakers without modifying segments:
+
+```json
+"speakers": {
+  "count": 2,
+  "entries": [
+    { "id": "spk_001", "label": "Speaker 1", "display_name": null },
+    { "id": "spk_002", "label": "Speaker 2", "display_name": null }
+  ]
+}
+```
+
+**How renaming works (Transcript Studio, Meeting Intelligence):**
+1. User renames "Speaker 1" → "Rahul" in UI
+2. Client updates `entries[0].display_name = "Rahul"` (local state)
+3. All segments with `speaker_id: "spk_001"` automatically display "Rahul" via lookup
+4. No segment-level edits needed; no data loss; undo = set display_name back to null
+
+**How modules resolve speaker name:**
+```
+display_name ?? label  (show display_name if set, else fall back to label)
+```
+
+### Transliteration Architecture (Critical for Hinglish)
+
+The schema supports **non-destructive transliteration** via dual text fields:
+
+| Field | Content | Mutability | Used by |
+|-------|---------|-----------|---------|
+| `text` | Original engine output (Devanagari for Hindi, Latin for English) | IMMUTABLE — never modified after creation | Content Studio (NLP), Export (original), Search |
+| `text_display` | User-facing text (may be Roman Hindi transliterated) | MUTABLE — changes with user preference toggle | Transcript Studio (UI), Subtitle Studio (display) |
+| `transliteration_applied` | Which script `text_display` is in ("roman", "devanagari", null) | Updated when user toggles | UI rendering logic |
+
+**Why dual fields matter:**
+- Content Studio runs summarization on `text` (original) — NLP models work better on the script they were trained on
+- Transcript Studio shows `text_display` — what the user wants to read
+- Export Center lets user choose: export in original script or display script
+- Undo is trivial: regenerate `text_display` from `text` with a different transliteration setting
+
+### Quality Gate for Downstream Modules
+
+The `quality_score` and `quality_label` fields enable downstream modules to make informed decisions:
+
+| quality_label | quality_score | Downstream behavior |
+|---------------|---------------|---------------------|
+| excellent | > 0.9 | All modules process normally |
+| good | 0.7 - 0.9 | All modules process normally |
+| fair | 0.5 - 0.7 | Content Studio shows warning: "Output may be inaccurate"; Meeting Intelligence skips low-confidence action items |
+| poor | < 0.5 | Content Studio / Meeting Intelligence show: "Audio quality too low for reliable analysis. Please review transcript manually." Modules still produce output but with prominent warning. |
+
+**Calculation:** `quality_score = mean(segments[].confidence)` where confidence is available; if engine provides no confidence, quality_score = null (modules treat as "unknown quality, proceed with caution").
+
+### full_text Usage Guidance
+
+`full_text` is a **convenience field** — plain concatenation of `segments[].text` joined by newlines. It contains:
+- ✅ All text content in original script
+- ❌ No speaker labels
+- ❌ No timestamps
+- ❌ No paragraph/topic boundaries
+
+**Downstream module rules:**
+| If module needs... | Use... | NOT... |
+|-------------------|--------|--------|
+| Text for summarization | `segments[].text` (iterate, join with context) | `full_text` alone (no speaker context) |
+| "Who said what" | `segments[].text` + `speaker_id` resolved via `speakers.entries` | `full_text` (no speaker info) |
+| Full-text search | `full_text` (fast string search) | Iterating all segments (slow) |
+| Export (plain text) | `full_text` (user expects simple text file) | — |
+| Topic detection | `segments[]` with timestamps (topic shifts correlate with time gaps + speaker changes) | `full_text` (loses temporal structure) |
+
+**Rule:** Modules that need speaker context, timestamps, or language info MUST iterate `segments[]` directly. `full_text` is for search and simple export only.
+
 ### Downstream Module Consumption Map
 
-| Module | Primary Fields Used | Secondary Fields |
-|--------|-------------------|-----------------|
-| Transcript Studio | `segments` (text, start, end, speaker), `full_text` | confidence, words |
-| Subtitle Studio | `segments` (text, start, end), `words` (precise timing) | language |
-| Export Center | `full_text`, `segments`, `transcription_meta` | all metadata |
-| Content Studio | `full_text`, `segments.text` | language |
-| Meeting Intelligence | `segments` (text, speaker, start), `speakers` | confidence, duration |
-| Creator Studio | `segments` (text, start, end), `full_text` | words |
-| Business Studio | `segments` (text, speaker), `full_text`, `speakers` | confidence |
+| Module | Primary Fields Used | Secondary Fields | Quality Gate |
+|--------|-------------------|-----------------|--------------|
+| Transcript Studio | `segments` (text_display, start, end, speaker_id → resolved name), `full_text` | confidence, words, text (for undo) | Show all results; highlight low-confidence segments |
+| Subtitle Studio | `segments` (text_display, start, end), `words` (precise timing) | language, words[].language | Show all; warn if no word timestamps |
+| Export Center | `full_text`, `segments` (text or text_display per user choice), `transcription_meta` | all metadata, speakers.entries | No gate — export whatever exists |
+| Content Studio | `segments[].text` (ORIGINAL, not display), `full_text` | language, punctuation_restored | Skip NLP if quality_label = "poor"; warn if punctuation_restored = false |
+| Meeting Intelligence | `segments` (text, speaker_id, start), `speakers.entries` | confidence, duration | Skip action-item extraction if quality_label = "poor" |
+| Creator Studio | `segments` (text_display, start, end), `full_text` | words, sequence_index | No hard gate; warn on "fair" |
+| Business Studio | `segments` (text, speaker_id → resolved name), `speakers.entries` | confidence, full_text | Warn on "fair"; skip extraction on "poor" |
+
+**Critical note:** Content Studio and Meeting Intelligence use `segments[].text` (original) for NLP processing — NOT `text_display`. Transliterated Roman Hindi would confuse NLP models trained on Devanagari or English. `text_display` is for human-facing UI only.
 
 ---
 
