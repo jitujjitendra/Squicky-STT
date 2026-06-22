@@ -98,13 +98,31 @@ export function Timeline() {
       const cue = cues.find((c) => c.id === dragState.cueId);
       if (!cue) return;
 
+      const MIN_GAP = 0.08; // 80ms minimum gap between cues
+      const sortedActive = activeCues.sort((a, b) => a.start - b.start);
+      const cueIdx = sortedActive.findIndex((c) => c.id === dragState.cueId);
+
       if (dragState.edge === 'start') {
-        const newStart = Math.max(0, cue.start + deltaTime);
+        let newStart = Math.max(0, cue.start + deltaTime);
+        // Enforce min gap with previous cue
+        if (cueIdx > 0) {
+          const prevCue = sortedActive[cueIdx - 1];
+          if (prevCue) {
+            newStart = Math.max(newStart, prevCue.end + MIN_GAP);
+          }
+        }
         if (newStart < cue.end - 0.2) {
           updateCue(dragState.cueId, { start: newStart });
         }
       } else {
-        const newEnd = Math.min(timeline.totalDuration, cue.end + deltaTime);
+        let newEnd = Math.min(timeline.totalDuration, cue.end + deltaTime);
+        // Enforce min gap with next cue
+        if (cueIdx < sortedActive.length - 1) {
+          const nextCue = sortedActive[cueIdx + 1];
+          if (nextCue) {
+            newEnd = Math.min(newEnd, nextCue.start - MIN_GAP);
+          }
+        }
         if (newEnd > cue.start + 0.2) {
           updateCue(dragState.cueId, { end: newEnd });
         }

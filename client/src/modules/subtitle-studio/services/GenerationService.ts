@@ -31,7 +31,7 @@ const CLAUSE_ENDS = /[,;:\-]+$/;
 function generateCueId(): CueId {
   const rand = Math.random().toString(36).substring(2, 10);
   const time = Date.now().toString(36);
-  return `cue_${time}${rand}`;
+  return `cue_${time}${rand}` as CueId;
 }
 
 /**

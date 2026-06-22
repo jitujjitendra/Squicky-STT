@@ -14,7 +14,7 @@
  * Route: /subtitles
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button, Icon, Badge } from '@/shared/components';
 import { useSubtitleStudioStore } from './store';
 import { useActiveTranscript } from './hooks/useActiveTranscript';
@@ -41,6 +41,27 @@ export function SubtitleStudioPage() {
       generate(transcript);
     }
   }, [transcript, cues.length, isGenerating, generate]);
+
+  // Auto-validate on cue changes (debounced 500ms)
+  const validateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const runValidation = useSubtitleStudioStore((s) => s.runValidation);
+
+  useEffect(() => {
+    if (cues.length === 0) return;
+
+    if (validateTimeoutRef.current) {
+      clearTimeout(validateTimeoutRef.current);
+    }
+    validateTimeoutRef.current = setTimeout(() => {
+      runValidation();
+    }, 500);
+
+    return () => {
+      if (validateTimeoutRef.current) {
+        clearTimeout(validateTimeoutRef.current);
+      }
+    };
+  }, [cues, runValidation]);
 
   // Error state
   if (error) {
