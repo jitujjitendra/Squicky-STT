@@ -11,8 +11,6 @@
  * - No external font loading required
  */
 
-import React from 'react';
-
 interface IconProps {
   /** Icon name identifier */
   name: string;

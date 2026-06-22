@@ -4,8 +4,6 @@
  * Displays quality metrics for generated content:
  * coherence, coverage, and readability scores.
  */
-
-import React from 'react';
 import { Badge } from '@/shared/components';
 import { useContentStudioStore } from '../store';
 

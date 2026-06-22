@@ -3,8 +3,6 @@
  *
  * Displays detected business opportunities with review controls.
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { BusinessOpportunity, ReviewStatus } from '../types';

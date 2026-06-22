@@ -4,8 +4,6 @@
  * Displays the top-level summary of the business conversation
  * including mode, analytics, and key summary sentences.
  */
-
-import React from 'react';
 import { Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { BusinessMode } from '../types';

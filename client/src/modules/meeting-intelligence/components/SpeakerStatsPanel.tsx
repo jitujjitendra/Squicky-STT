@@ -4,8 +4,6 @@
  * Displays per-speaker analytics including a simple bar chart showing
  * participation percentages, segment count, speaking time, and questions asked.
  */
-
-import React from 'react';
 import { useMeetingIntelligenceStore } from '../store';
 
 /**

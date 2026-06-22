@@ -4,8 +4,6 @@
  * Displays available export templates as selectable cards.
  * Each card shows the template name and brief description.
  */
-
-import React from 'react';
 import { useExportCenterStore } from '../store';
 import { templates } from '../services/TemplateEngine';
 import type { TemplateName } from '../types';

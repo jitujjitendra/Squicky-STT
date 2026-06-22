@@ -4,8 +4,6 @@
  * Displays detected decisions with confidence level indicators
  * and review controls (Confirm/Dismiss).
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useMeetingIntelligenceStore } from '../store';
 import type { Decision, Confidence, ReviewStatus } from '../types';

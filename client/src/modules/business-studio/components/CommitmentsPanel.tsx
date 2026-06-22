@@ -4,8 +4,6 @@
  * Displays detected commitments with scope (external/internal),
  * accountability level, and review controls.
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { Commitment, ReviewStatus } from '../types';

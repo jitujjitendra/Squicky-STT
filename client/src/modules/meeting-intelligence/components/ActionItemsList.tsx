@@ -5,8 +5,6 @@
  * Items are colored by priority and show assignee/deadline metadata.
  * Human-in-the-loop: items start as "suggested" until confirmed.
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useMeetingIntelligenceStore } from '../store';
 import type { ActionItem, Priority, ReviewStatus } from '../types';

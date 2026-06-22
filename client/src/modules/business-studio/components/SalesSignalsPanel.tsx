@@ -4,8 +4,6 @@
  * Displays detected sales signals: objections, buying signals,
  * interest indicators, and deal risks with review controls.
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { SalesSignal, SalesSignalType, ReviewStatus } from '../types';

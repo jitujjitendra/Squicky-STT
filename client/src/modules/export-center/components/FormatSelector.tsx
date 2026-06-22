@@ -5,8 +5,6 @@
  * Each chip shows the format name and availability state.
  * Supports multi-select for batch export.
  */
-
-import React from 'react';
 import { Badge } from '@/shared/components';
 import { useExportCenterStore } from '../store';
 import { formatRegistry } from '../services/FormatRegistry';

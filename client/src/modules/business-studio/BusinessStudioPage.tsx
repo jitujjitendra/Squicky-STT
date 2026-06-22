@@ -19,7 +19,7 @@
  * Route: /business
  */
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Button, Icon, Badge } from '@/shared/components';
 import { useActiveTranscript } from './hooks/useActiveTranscript';
 import { useBusinessAnalysis } from './hooks/useBusinessAnalysis';

@@ -7,7 +7,7 @@
  * - Visibility toggle (filter by speaker)
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { SpeakerId } from '@/modules/speech-engine/types';
 import { Icon } from '@/shared/components';
 import { useSpeakerManager } from '../hooks';

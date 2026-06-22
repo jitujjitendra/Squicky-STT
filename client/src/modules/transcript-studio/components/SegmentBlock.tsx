@@ -11,7 +11,7 @@
  * - Edit/delete/split actions
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { SegmentId, SpeakerId } from '@/modules/speech-engine/types';
 import type { DisplaySegment } from '../types';
 import { useTranscriptStudioStore } from '../store';

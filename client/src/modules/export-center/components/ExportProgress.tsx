@@ -4,8 +4,6 @@
  * Displays pipeline progress with stage indicators and a progress bar.
  * Shows after export is initiated and until completion.
  */
-
-import React from 'react';
 import { Badge } from '@/shared/components';
 import { useExportCenterStore } from '../store';
 

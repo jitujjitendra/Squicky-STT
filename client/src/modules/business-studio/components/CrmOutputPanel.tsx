@@ -5,7 +5,7 @@
  * with copy-to-clipboard functionality.
  */
 
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Button, Icon } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import { useBusinessExport } from '../hooks/useBusinessExport';

@@ -6,8 +6,6 @@
  *
  * Route: /export
  */
-
-import React from 'react';
 import { Button, Icon, Badge } from '@/shared/components';
 import { useActiveTranscript } from './hooks/useActiveTranscript';
 import { useExportPipeline } from './hooks/useExportPipeline';

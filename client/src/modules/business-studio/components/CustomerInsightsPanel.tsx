@@ -4,8 +4,6 @@
  * Displays detected customer intelligence: pain points, requirements,
  * expectations, and concerns with review controls.
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { CustomerInsight, CustomerInsightType, ReviewStatus } from '../types';

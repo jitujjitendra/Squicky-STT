@@ -4,8 +4,6 @@
  * Displays detected risks with severity-colored indicators
  * and review controls (Confirm/Dismiss).
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useMeetingIntelligenceStore } from '../store';
 import type { Risk, Severity, ReviewStatus } from '../types';

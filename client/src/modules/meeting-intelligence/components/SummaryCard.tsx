@@ -4,8 +4,6 @@
  * Displays the meeting summary with key metadata (duration, participants,
  * meeting type). Uses extractive sentences from TextRank.
  */
-
-import React from 'react';
 import { Badge, Icon } from '@/shared/components';
 import { useMeetingIntelligenceStore } from '../store';
 

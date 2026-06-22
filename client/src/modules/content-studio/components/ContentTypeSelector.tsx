@@ -4,8 +4,6 @@
  * Tab/chip-based selector for choosing the content generation type.
  * Displays all 8 content types with labels and descriptions.
  */
-
-import React from 'react';
 import { useContentStudioStore } from '../store';
 import type { ContentType } from '../types';
 

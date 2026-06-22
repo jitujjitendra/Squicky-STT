@@ -5,8 +5,6 @@
  * candidate strengths, concerns, and detected skills.
  * Only visible when business mode is "recruitment-interview".
  */
-
-import React from 'react';
 import { Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 

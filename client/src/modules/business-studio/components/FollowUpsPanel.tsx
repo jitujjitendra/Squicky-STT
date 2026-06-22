@@ -4,8 +4,6 @@
  * Displays detected follow-up items and open questions
  * with review controls.
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { FollowUp, ReviewStatus } from '../types';

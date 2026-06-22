@@ -5,8 +5,6 @@
  * Supports primary, secondary, ghost, and danger variants.
  */
 
-import React from 'react';
-
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   /** Visual variant */
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger';

@@ -6,7 +6,7 @@
  * which parts of the transcript contributed to the output.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { useContentStudioStore } from '../store';
 
 /**

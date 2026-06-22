@@ -5,7 +5,7 @@
  * match count display, and case sensitivity toggle.
  */
 
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { Icon, Button } from '@/shared/components';
 import { useSearch } from '../hooks';
 

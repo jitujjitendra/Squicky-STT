@@ -8,8 +8,6 @@
  * - Playback speed control
  * - Active segment highlighting synced to playback
  */
-
-import React from 'react';
 import { useAudioSync } from '../hooks';
 
 /** Format seconds to MM:SS */

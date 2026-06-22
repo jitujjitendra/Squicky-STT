@@ -11,8 +11,6 @@
  *
  * Route: /content
  */
-
-import React from 'react';
 import { Button, Icon, Badge } from '@/shared/components';
 import { useActiveTranscript } from './hooks/useActiveTranscript';
 import { useContentGeneration } from './hooks/useContentGeneration';

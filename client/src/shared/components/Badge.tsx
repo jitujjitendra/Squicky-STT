@@ -4,8 +4,6 @@
  * Small label/indicator component for status, counts, or metadata.
  */
 
-import React from 'react';
-
 interface BadgeProps {
   /** Badge content */
   children: React.ReactNode;

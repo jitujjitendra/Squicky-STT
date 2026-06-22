@@ -5,7 +5,7 @@
  * before the user triggers the download. Supports all text-based formats.
  */
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { useExportCenterStore } from '../store';
 import { useExportPipeline } from '../hooks/useExportPipeline';
 

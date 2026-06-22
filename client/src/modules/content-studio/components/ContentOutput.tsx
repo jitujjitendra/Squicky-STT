@@ -5,7 +5,7 @@
  * Provides copy and export actions.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button, Icon } from '@/shared/components';
 import { useContentStudioStore } from '../store';
 import { useContentExport } from '../hooks/useContentExport';

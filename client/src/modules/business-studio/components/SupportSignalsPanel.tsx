@@ -4,8 +4,6 @@
  * Displays detected support signals: issues, resolutions,
  * and escalations with review controls.
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { SupportSignal, SupportSignalType, ReviewStatus } from '../types';

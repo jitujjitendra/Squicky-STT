@@ -4,8 +4,6 @@
  * Toggleable export options: timestamps, speakers, confidence, mode.
  * Uses checkboxes and radio buttons for clear interaction.
  */
-
-import React from 'react';
 import { useExportOptions } from '../hooks/useExportOptions';
 import type { ExportMode } from '../types';
 

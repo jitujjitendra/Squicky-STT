@@ -4,8 +4,6 @@
  * Displays detected business risks with severity indicators
  * and review controls (Confirm/Dismiss).
  */
-
-import React from 'react';
 import { Button, Badge } from '@/shared/components';
 import { useBusinessStudioStore } from '../store';
 import type { BusinessRisk, Severity, ReviewStatus } from '../types';
