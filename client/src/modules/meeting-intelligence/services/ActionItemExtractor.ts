@@ -16,18 +16,18 @@
 import type { TranscriptSegment, SpeakerEntry, SpeakerId } from '@/modules/speech-engine/types';
 import type { ActionItem, Priority } from '../types';
 
-/** English action patterns (regex) */
+/** English action patterns (regex) — capture to sentence end, 5-150 chars */
 const EN_ACTION_PATTERNS: RegExp[] = [
-  /\b(?:i|we|he|she|they)\s+will\s+(.{10,80})/i,
-  /\bneed\s+to\s+(.{10,80})/i,
-  /\bshould\s+(.{10,80})/i,
-  /\bmust\s+(.{10,80})/i,
-  /\bhave\s+to\s+(.{10,80})/i,
-  /\bgoing\s+to\s+(.{10,80})/i,
-  /\blet(?:'s|s)\s+(.{10,80})/i,
-  /\bplease\s+(.{10,80})/i,
-  /\baction\s*(?:item)?[:\s]+(.{10,80})/i,
-  /\btake\s+care\s+of\s+(.{10,80})/i,
+  /\b(?:i|we|he|she|they)\s+will\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\bneed\s+to\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\bshould\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\bmust\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\bhave\s+to\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\bgoing\s+to\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\blet(?:'s|s)\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\bplease\s+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\baction\s*(?:item)?[:\s]+(.{5,150}?)(?:\.|!|\?|$)/i,
+  /\btake\s+care\s+of\s+(.{5,150}?)(?:\.|!|\?|$)/i,
 ];
 
 /** Hindi/Hinglish action patterns */

@@ -37,6 +37,21 @@ export interface MeetingAnalysisResult {
 }
 
 /**
+ * Deduplicate extracted items by segment index.
+ * If multiple items are extracted from the same segment (e.g., both EN and HI
+ * patterns match), only the first match is kept. This prevents duplicate items
+ * in the UI when Hinglish code-mixed sentences trigger both pattern sets.
+ */
+function deduplicateBySegment<T extends { segmentIndex: number }>(items: T[]): T[] {
+  const seen = new Set<number>();
+  return items.filter((item) => {
+    if (seen.has(item.segmentIndex)) return false;
+    seen.add(item.segmentIndex);
+    return true;
+  });
+}
+
+/**
  * Run the full meeting analysis pipeline.
  *
  * Pipeline flow:
@@ -53,9 +68,9 @@ export function runMeetingAnalysis(transcript: StandardTranscript): MeetingAnaly
   const meetingType = detectMeetingType(segments);
 
   // Step 2-3: Intelligence Extraction (all run on same data, conceptually parallel)
-  const actionItems = extractActionItems(segments, speakers);
-  const decisions = detectDecisions(segments, speakers);
-  const risks = detectRisks(segments, speakers);
+  const actionItems = deduplicateBySegment(extractActionItems(segments, speakers));
+  const decisions = deduplicateBySegment(detectDecisions(segments, speakers));
+  const risks = deduplicateBySegment(detectRisks(segments, speakers));
   const deadlines = detectDeadlines(segments);
 
   // Step 4: Speaker Analytics

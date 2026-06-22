@@ -38,11 +38,6 @@ export function useMeetingAnalysis() {
       return;
     }
 
-    const quality = transcript.transcription_meta?.quality;
-    if (quality && quality.quality_label === 'poor') {
-      setError('Transcript quality is too poor for reliable analysis. Results may be inaccurate.');
-    }
-
     setIsAnalyzing(true);
     setError(null);
 
@@ -59,6 +54,12 @@ export function useMeetingAnalysis() {
         setSpeakerStats(result.speakerStats);
         setSummary(result.summary);
         setIsAnalyzing(false);
+
+        // Show quality warning AFTER results are ready (not before, not overwritten)
+        const quality = transcript.transcription_meta?.quality;
+        if (quality && quality.quality_label === 'poor') {
+          setError('Low-quality transcript — results may be inaccurate. Review all items carefully.');
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Analysis failed unexpectedly.';
         setError(message);
