@@ -26,8 +26,8 @@ export interface EngineCapabilities {
   languages: string[];
   /** Maximum audio duration in seconds */
   max_duration_sec: number;
-  /** Compute requirement level */
-  compute_requirement: 'low' | 'medium' | 'high';
+  /** Where this engine runs (determines compute-placement logic) */
+  compute_requirement: 'cpu' | 'gpu' | 'wasm';
 }
 
 /**

@@ -66,7 +66,7 @@ export class MockAdapter implements TranscriptionEngine {
       word_timestamps: true,
       languages: ['en', 'es', 'fr', 'de', 'it', 'pt', 'nl', 'ja', 'zh', 'ko'],
       max_duration_sec: 3600,
-      compute_requirement: 'low',
+      compute_requirement: 'wasm',
     };
   }
 
@@ -188,6 +188,9 @@ export class MockAdapter implements TranscriptionEngine {
       speakers: {
         count: options.diarization ? 2 : 0,
         entries: options.diarization ? speakers : [],
+        speaking_time: options.diarization
+          ? { [speakers[0]!.id]: duration * 0.6, [speakers[1]!.id]: duration * 0.4 }
+          : {},
       },
       segments,
       full_text: fullText,
@@ -208,6 +211,10 @@ export class MockAdapter implements TranscriptionEngine {
           punctuation_restored: true,
           is_partial: false,
           live_origin: false,
+          hinglish_detected: false,
+          transliteration_applied: null,
+          topic_boundaries_detected: false,
+          merge_artifacts: false,
         },
         created_at: new Date().toISOString(),
       },

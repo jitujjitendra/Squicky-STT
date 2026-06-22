@@ -71,6 +71,8 @@ export interface TranscriptSegment {
   words?: TranscriptWord[];
   /** Language detected for this segment */
   language?: LanguageCode;
+  /** Hint that a topic boundary starts at this segment (used by Creator Studio for chapter detection) */
+  topic_boundary_hint?: boolean;
 }
 
 /**
@@ -99,6 +101,14 @@ export interface ProcessingFlags {
   is_partial: boolean;
   /** Whether the source was a live stream */
   live_origin: boolean;
+  /** Whether Hindi+English code-switching was detected */
+  hinglish_detected: boolean;
+  /** Which transliteration was applied (null = none) */
+  transliteration_applied: 'roman' | 'devanagari' | null;
+  /** Whether topic boundaries were detected in segments */
+  topic_boundaries_detected: boolean;
+  /** Whether chunk merge artifacts exist (timing may be imprecise at boundaries) */
+  merge_artifacts: boolean;
 }
 
 /**
@@ -152,6 +162,8 @@ export interface StandardTranscript {
     count: number;
     /** Speaker entries */
     entries: SpeakerEntry[];
+    /** Speaking duration per speaker (speaker_id → seconds) */
+    speaking_time: Record<string, number>;
   };
   /** Ordered transcript segments */
   segments: TranscriptSegment[];
