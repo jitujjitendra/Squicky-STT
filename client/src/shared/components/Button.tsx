@@ -1,8 +1,8 @@
 /**
- * Button Component
+ * Button Component - Premium Edition
  * 
  * Reusable button with variant support matching the design system.
- * Supports primary, secondary, ghost, and danger variants.
+ * Supports primary (with glow), secondary, ghost, and danger variants.
  */
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -18,17 +18,17 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<string, string> = {
   primary:
-    'bg-accent text-primary-dark hover:bg-accent-hover active:bg-accent-dark font-medium',
+    'bg-accent text-primary-dark font-semibold hover:bg-accent-hover active:bg-accent-dark shadow-glow-accent-sm hover:shadow-glow-accent',
   secondary:
-    'bg-transparent border border-neutral-400 dark:border-neutral-600 text-neutral-800 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-800',
+    'bg-transparent border border-[var(--border-secondary)] text-[var(--text-secondary)] hover:border-[var(--border-accent)] hover:text-accent hover:shadow-glow-accent-sm',
   ghost:
-    'bg-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-700 dark:text-neutral-300',
+    'bg-transparent hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]',
   danger:
-    'bg-error text-white hover:bg-red-600 active:bg-red-700',
+    'bg-error/10 border border-error/20 text-error hover:bg-error/20 hover:border-error/40',
 };
 
 const sizeClasses: Record<string, string> = {
-  sm: 'px-3 py-1.5 text-sm',
+  sm: 'px-3 py-1.5 text-xs',
   md: 'px-4 py-2 text-sm',
   lg: 'px-6 py-3 text-base',
 };
@@ -47,7 +47,7 @@ export function Button({
         inline-flex items-center justify-center gap-2
         rounded-button transition-all duration-200
         focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2
-        disabled:opacity-50 disabled:cursor-not-allowed
+        disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none
         ${variantClasses[variant]}
         ${sizeClasses[size]}
         ${fullWidth ? 'w-full' : ''}

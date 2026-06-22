@@ -1,5 +1,5 @@
 /**
- * Processing Status Component
+ * Processing Status Component - Premium Edition
  *
  * Displays the overall processing status: number of jobs queued,
  * processing, completed, and failed. Provides controls for
@@ -24,9 +24,10 @@ export function ProcessingStatus() {
   if (jobs.length === 0) return null;
 
   return (
-    <div className="w-full max-w-2xl mx-auto mt-6">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-[var(--text-primary)]">
+    <div className="w-full max-w-2xl mx-auto mt-8">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold text-[var(--text-primary)] flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
           Processing Queue
         </h3>
         <div className="flex items-center gap-2">

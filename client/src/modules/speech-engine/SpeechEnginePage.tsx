@@ -1,5 +1,5 @@
 /**
- * Speech Engine Module - Page Component
+ * Speech Engine Module - Page Component (Premium Edition)
  *
  * The home page and primary entry point for the Squicky platform.
  * Orchestrates the upload zone, processing queue, job progress,
@@ -52,13 +52,14 @@ export function SpeechEnginePage() {
 
   return (
     <div className="flex flex-col items-center px-4 py-8">
-      {/* Page header */}
-      <div className="text-center mb-8">
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">
-          Speech Engine
+      {/* Page header with gradient text */}
+      <div className="text-center mb-10">
+        <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-3">
+          Speech <span className="text-gradient">Engine</span>
         </h1>
-        <p className="text-[var(--text-secondary)] text-sm max-w-md mx-auto">
-          Upload audio or video files for transcription. All processing runs locally in your browser.
+        <p className="text-[var(--text-secondary)] text-sm max-w-md mx-auto leading-relaxed">
+          Upload audio or video files for transcription. All processing runs 
+          <span className="text-privacy font-medium"> locally</span> in your browser.
         </p>
       </div>
 
@@ -67,13 +68,13 @@ export function SpeechEnginePage() {
 
       {/* Submit button (shown when files are selected) */}
       {selectedFiles.length > 0 && (
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-6 flex items-center gap-3">
           <span className="text-sm text-[var(--text-secondary)]">
             {selectedFiles.length} file{selectedFiles.length > 1 ? 's' : ''} ready
           </span>
           <button
             onClick={() => void handleSubmitAndProcess()}
-            className="px-4 py-2 rounded-button bg-accent text-primary-dark font-medium text-sm hover:bg-accent-hover transition-colors"
+            className="px-5 py-2.5 rounded-button bg-accent text-primary-dark font-semibold text-sm hover:bg-accent-hover shadow-glow-accent-sm hover:shadow-glow-accent transition-all duration-200"
           >
             Start Transcription
           </button>

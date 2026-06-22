@@ -1,9 +1,9 @@
 /**
- * Main Layout Component
+ * Main Layout Component - Premium Edition
  * 
  * Orchestrates the complete application layout:
- * - Fixed header (56px top)
- * - Collapsible sidebar (240px / 64px)
+ * - Fixed header (56px top) with glassmorphism
+ * - Collapsible sidebar (240px / 64px) with gradient background
  * - Fluid main content area
  * - Subtle footer (40px)
  * 

@@ -1,33 +1,34 @@
 /**
- * Badge Component
+ * Badge Component - Premium Edition
  * 
- * Small label/indicator component for status, counts, or metadata.
+ * Status/label badges with color variants and subtle glow effects.
  */
 
 interface BadgeProps {
-  /** Badge content */
-  children: React.ReactNode;
   /** Visual variant */
-  variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'privacy';
+  variant?: 'default' | 'info' | 'success' | 'warning' | 'error' | 'privacy';
+  /** Content */
+  children: React.ReactNode;
   /** Additional CSS class */
   className?: string;
 }
 
 const variantClasses: Record<string, string> = {
-  default: 'bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200',
-  success: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-  warning: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
-  error: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
-  info: 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
-  privacy: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
+  default: 'bg-[var(--bg-tertiary)] text-[var(--text-secondary)] border-[var(--border-primary)]',
+  info: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+  success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  warning: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+  error: 'bg-red-500/10 text-red-400 border-red-500/20',
+  privacy: 'bg-emerald-500/10 text-privacy border-emerald-500/20',
 };
 
-export function Badge({ children, variant = 'default', className = '' }: BadgeProps) {
+export function Badge({ variant = 'default', children, className = '' }: BadgeProps) {
   return (
     <span
       className={`
         inline-flex items-center gap-1 px-2 py-0.5
-        rounded-full text-xs font-medium
+        rounded-full text-[11px] font-medium
+        border
         ${variantClasses[variant]}
         ${className}
       `.trim()}
