@@ -6,7 +6,7 @@
   "description": "Squicky Speech Intelligence Platform - Privacy-first speech-to-text",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "type-check": "tsc --noEmit"
