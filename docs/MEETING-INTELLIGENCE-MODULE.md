@@ -151,8 +151,13 @@ This module DOES:
 
 - Validate transcript schema
 - Extract metadata (duration, speaker count, language)
+- **Quality gate check:**
+  - `quality_label == "excellent" / "good"`: proceed normally
+  - `quality_label == "fair"`: proceed + show info banner "Transcript quality is moderate — review extracted items carefully"
+  - `quality_label == "poor"`: proceed + show prominent warning banner "Low-quality transcript — extraction may contain many errors. Review ALL items manually before exporting."
+  - `quality_label == null`: proceed + show info note "Quality unknown — verify results"
 - Check ContentIntelligenceCache for existing extractions
-- Normalize segments (merge short fragments, split overly long ones)
+- Normalize segments (merge short same-speaker fragments, split overly long ones)
 
 ### 2.3 Stage 2: Meeting Context Detection
 
@@ -168,11 +173,30 @@ Classifies meeting type using heuristics from keywords in first 20% of transcrip
 
 ### 2.4 Stage 3: Discussion Segmentation
 
-Segments transcript into topic clusters using:
-- Topic shift detection (keyword clustering)
-- Speaker change patterns (new dominant speaker often signals new topic)
-- Temporal gaps (silence > 3s suggests topic change)
-- Explicit markers ("next item", "moving on", "agle topic pe", "chalo aage badhte hain")
+Segments transcript into topic clusters using a multi-signal algorithm:
+
+**Algorithm (same approach as Content Studio, adapted for meetings):**
+
+```
+1. Build TF-IDF vectors per segment (using shared Hindi+English IDF tables)
+2. Sliding window comparison (window = 3 segments):
+   - Calculate cosine similarity between adjacent windows
+   - If similarity < 0.25, mark as potential topic boundary
+3. Boundary BOOST signals (increase confidence of boundary):
+   - Speaker change after 3+ segments dominated by one speaker (+0.3)
+   - Temporal gap > 3 seconds between segments (+0.2)
+   - Explicit transition phrases: "next item", "moving on", "agle topic pe",
+     "chalo aage badhte hain", "let's discuss", "ab baat karte hain" (+0.5)
+   - topic_boundary_hint = true in StandardTranscript (+0.4)
+4. Merge very short topics (< 2 segments) with adjacent topic
+5. Label each topic: top 2-3 TF-IDF keywords from that segment group
+6. Output: DiscussionSegment[] with topic_label, segments[], start_time, end_time
+```
+
+**Meeting-specific additions (vs Content Studio general approach):**
+- Meeting context detection (Stage 2) informs expected topic patterns (e.g. "budget" section in project reviews)
+- Speaker dominance shift is a stronger signal in meetings than in podcasts
+- Explicit agenda markers ("Item 1", "Point 2", "First topic") get highest priority
 
 ### 2.5 Stage 4: Intelligence Extraction
 
@@ -364,12 +388,22 @@ interface Decision {
 |----------|--------|---------|------------|
 | 1 | Direct name mention | "Rahul will handle it" | Assignee = "Rahul" |
 | 2 | Self-assignment (I/main) | "I will send it" | Assignee = current speaker |
-| 3 | Second person (you/tum/aap) | "Can you check that?" | Addressee (context-based) |
+| 3 | Second person (you/tum/aap) | "Can you check that?" | **UNRELIABLE in multi-speaker** (see note below) |
 | 4 | Third person (he/she/wo) | "He will do it" | Attempt context resolution |
 | 5 | Role/team mention | "The design team should..." | "Design Team" (group) |
 | 6 | No clear owner | "Someone needs to fix this" | "Unassigned" |
 
-### 5.2 Graceful Failure
+### 5.2 "You" Resolution Limitation (Honest)
+
+**"Can you check that?" in a 4-person meeting is essentially UNRESOLVABLE at Stage 1.** Without video gaze tracking or explicit naming, second-person pronouns in multi-speaker meetings cannot be attributed with confidence.
+
+**Stage 1 behavior:** When "you/tum/aap" pattern matches:
+- Set confidence to 0.30 (very low)
+- Mark assignee as "Unassigned (addressed to participant)"
+- In Review UI: highlight as "needs manual assignment"
+- Stage 2 improvement: look at immediate previous/next speaker turn for contextual clue (if Speaker A says "you should..." and Speaker B responds "ok I'll do it" → assign to B)
+
+### 5.3 Graceful Failure
 
 - If no assignee detected: mark as "Unassigned" (never guess wrong)
 - Dashboard highlights unassigned items for manual resolution
@@ -758,25 +792,35 @@ interface StandardTranscript {
 }
 
 interface TranscriptSegment {
-  id: string;
-  start_time: number;
-  end_time: number;
-  text: string;
-  speaker_id: string | null;
-  speaker_name: string | null;
-  confidence: number;
+  id: string;                    // stable UUID (e.g. "seg_a1b2c3d4")
+  sequence_index: number;        // 0-based position for ordering
+  start: number;                 // float seconds (NOT start_time)
+  end: number;                   // float seconds (NOT end_time)
+  text: string;                  // user's edited version (from merged output)
+  text_original: string;         // immutable engine output
+  speaker_id: string | null;     // resolve via speakers.entries[{id, label, display_name}]
+  confidence: number | null;     // may be null if engine doesn't provide
+  user_edited: boolean;          // true if user corrected this segment
+  topic_boundary_hint: boolean;  // true if topic shift detected here
+  words: Word[] | null;          // optional word-level timestamps
 }
+
+// Speaker resolution: display_name ?? label from speakers.entries
+// NEVER use speaker_name directly — always resolve via entries lookup
 ```
 
-### 13.2 Shared Patterns (from Content Studio)
+### 13.2 Shared Patterns (Platform-Level Library)
 
 ```
-import { ACTION_PATTERNS } from '@content-studio/patterns';
-import { DECISION_PATTERNS } from '@content-studio/patterns';
-import { TOPIC_PATTERNS } from '@content-studio/patterns';
+// Shared patterns live in a PLATFORM-LEVEL library, NOT coupled to Content Studio:
+import { ACTION_PATTERNS } from '@squicky/shared/intelligence-patterns';
+import { DECISION_PATTERNS } from '@squicky/shared/intelligence-patterns';
+import { TOPIC_PATTERNS } from '@squicky/shared/intelligence-patterns';
 ```
 
-Meeting Intelligence adds its own: RISK_PATTERNS, DEADLINE_PATTERNS, MEETING_TYPE_PATTERNS.
+**Why NOT import from Content Studio:** Module-level coupling means Meeting Intelligence breaks if Content Studio isn't loaded. Shared patterns belong in `shared/intelligence-patterns/` — consumed by BOTH Content Studio and Meeting Intelligence independently.
+
+Meeting Intelligence adds its own module-specific patterns: RISK_PATTERNS, DEADLINE_PATTERNS, MEETING_TYPE_PATTERNS (these remain in `meeting-intelligence/patterns/` since no other module needs them).
 
 ### 13.3 Event Bus
 
@@ -795,6 +839,54 @@ Meeting Intelligence adds its own: RISK_PATTERNS, DEADLINE_PATTERNS, MEETING_TYP
 'meeting:item:dismissed'
 'meeting:item:edited'
 ```
+
+### 13.4 ExportPayload Mapping (to Export Center)
+
+When user exports meeting intelligence, the `MeetingIntelligenceResult` maps to the Export Center's `ExportPayload`:
+
+```typescript
+function buildMeetingExportPayload(result: MeetingIntelligenceResult): ExportPayload {
+  return {
+    source_module: "meeting-intelligence",
+    payload_version: "1.0",
+    payload_type: "meeting",
+    data: {
+      summary: result.summary.executive_text,
+      action_items: result.action_items
+        .filter(a => a.status === 'confirmed')
+        .map(a => ({ task: a.task_text, assignee: a.assignee, deadline: a.deadline_raw, priority: a.priority })),
+      decisions: result.decisions
+        .filter(d => d.status === 'confirmed')
+        .map(d => ({ text: d.decision_text, proposed_by: d.proposed_by, confidence: d.confidence })),
+      topics: result.discussion_segments.map(s => s.topic_label),
+      risks: result.risks
+        .filter(r => r.status !== 'dismissed')
+        .map(r => ({ text: r.risk_text, severity: r.severity, raised_by: r.raised_by })),
+      speakers: result.speaker_stats
+    },
+    metadata: {
+      title: `Meeting Notes - ${result.context.meeting_type_label}`,
+      duration_sec: result.metadata.duration_seconds,
+      language: result.metadata.language,
+      speakers: {
+        count: result.metadata.speaker_count,
+        entries: result.metadata.speaker_entries
+      },
+      created_at: new Date().toISOString(),
+      quality_label: result.metadata.quality_label
+    },
+    export_options: {
+      include_timestamps: true,
+      include_speakers: true,
+      include_confidence: false,
+      mode: "detailed",
+      template: "meeting"
+    }
+  };
+}
+```
+
+**Key rule:** Only `confirmed` items are included in export. Dismissed items are excluded. Suggested (unreviewed) items are excluded by default (user can override with "Export all suggestions" toggle).
 
 ---
 
