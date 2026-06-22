@@ -1,8 +1,8 @@
 /**
- * Upload Zone Component
+ * Upload Zone Component - Premium Edition
  *
- * Drag-and-drop file upload area with browse button fallback.
- * Displays validation errors, supported formats, and privacy notice.
+ * Drag-and-drop file upload area with gradient border, glow effects,
+ * and premium glassmorphism design.
  *
  * Architecture decision: The upload zone is the primary entry point
  * for the speech engine. It is designed to be the dominant visual
@@ -30,7 +30,7 @@ export function UploadZone() {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      {/* Drop zone */}
+      {/* Drop zone with gradient border */}
       <div
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -48,28 +48,40 @@ export function UploadZone() {
         aria-label="Upload audio or video files"
         className={`
           relative w-full p-12
-          border-2 border-dashed rounded-card-lg
+          rounded-card-lg
           flex flex-col items-center
-          transition-all duration-200 cursor-pointer
+          transition-all duration-300 cursor-pointer
           focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2
           group
           ${
             isDragOver
-              ? 'border-accent bg-accent/5 scale-[1.01]'
-              : 'border-[var(--border-secondary)] bg-[var(--bg-secondary)] hover:border-accent hover:bg-accent/5'
+              ? 'bg-accent/5 scale-[1.01] shadow-glow-accent ring-2 ring-accent/30'
+              : 'bg-[var(--surface-card)] hover:bg-[var(--surface-card-hover)]'
           }
           ${isUploading ? 'pointer-events-none opacity-70' : ''}
+          border border-[var(--border-primary)]
+          hover:border-[var(--border-accent)] hover:shadow-glow-accent-sm
         `}
       >
+        {/* Gradient border overlay */}
+        <div className="absolute inset-0 rounded-card-lg overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 rounded-card-lg p-[1px] opacity-30 group-hover:opacity-60 transition-opacity duration-300">
+            <div className="absolute inset-0 rounded-card-lg bg-gradient-to-br from-accent/30 via-transparent to-accent-secondary-light/30" />
+          </div>
+        </div>
+
+        {/* Animated background orb */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-accent/5 blur-3xl group-hover:bg-accent/10 transition-all duration-500 pulse-glow pointer-events-none" />
+
         {/* Animated icon */}
         <div
           className={`
-            w-20 h-20 rounded-full flex items-center justify-center mb-6
-            transition-all duration-200
+            relative w-20 h-20 rounded-2xl flex items-center justify-center mb-6
+            transition-all duration-300
             ${
               isDragOver
-                ? 'bg-accent/20 text-accent scale-110'
-                : 'bg-accent/10 text-accent group-hover:bg-accent/20'
+                ? 'bg-accent/20 text-accent scale-110 shadow-glow-accent'
+                : 'bg-accent/10 text-accent group-hover:bg-accent/15 group-hover:shadow-glow-accent-sm'
             }
           `}
         >
@@ -77,12 +89,12 @@ export function UploadZone() {
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">
+        <h2 className="relative text-xl font-semibold text-[var(--text-primary)] mb-2">
           {isDragOver ? 'Drop files here' : 'Upload Audio or Video'}
         </h2>
 
         {/* Description */}
-        <p className="text-[var(--text-secondary)] text-center max-w-md mb-6 text-sm">
+        <p className="relative text-[var(--text-secondary)] text-center max-w-md mb-6 text-sm leading-relaxed">
           {isDragOver
             ? 'Release to start processing'
             : 'Drag and drop files here, or click to browse. All processing happens locally on your device.'}
@@ -90,22 +102,24 @@ export function UploadZone() {
 
         {/* Browse button */}
         {!isDragOver && (
-          <Button
-            variant="primary"
-            size="md"
-            onClick={(e) => {
-              e.stopPropagation();
-              openFileBrowser();
-            }}
-          >
-            <Icon name="mic" size={16} />
-            Browse Files
-          </Button>
+          <div className="relative">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={(e) => {
+                e.stopPropagation();
+                openFileBrowser();
+              }}
+            >
+              <Icon name="mic" size={16} />
+              Browse Files
+            </Button>
+          </div>
         )}
 
         {/* Loading indicator */}
         {isUploading && (
-          <div className="flex items-center gap-2 mt-4 text-sm text-[var(--text-secondary)]">
+          <div className="relative flex items-center gap-2 mt-4 text-sm text-[var(--text-secondary)]">
             <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             Validating files...
           </div>
@@ -129,10 +143,10 @@ export function UploadZone() {
           {errors.map((error, idx) => (
             <div
               key={idx}
-              className="flex items-start gap-2 p-3 rounded-card bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800"
+              className="flex items-start gap-2 p-3 rounded-card bg-red-500/5 border border-red-500/20"
             >
-              <Icon name="x" size={16} className="text-red-500 mt-0.5 shrink-0" />
-              <span className="text-sm text-red-700 dark:text-red-300">{error}</span>
+              <Icon name="x" size={16} className="text-red-400 mt-0.5 shrink-0" />
+              <span className="text-sm text-red-300">{error}</span>
             </div>
           ))}
         </div>
@@ -150,7 +164,7 @@ export function UploadZone() {
           (format) => (
             <span
               key={format}
-              className="px-2.5 py-0.5 text-xs rounded-full bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] font-mono"
+              className="px-2.5 py-0.5 text-[10px] rounded-full bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] font-mono border border-[var(--border-primary)]"
             >
               .{format.toLowerCase()}
             </span>

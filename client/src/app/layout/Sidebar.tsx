@@ -1,7 +1,8 @@
 /**
- * Sidebar Component
+ * Sidebar Component - Premium Edition
  * 
- * Collapsible navigation sidebar (240px expanded, 64px collapsed).
+ * Collapsible navigation sidebar (240px expanded, 64px collapsed)
+ * with glassmorphism background and accent glow on active items.
  * Shows navigation groups (CORE, STUDIOS) with icon+label or icon-only.
  * On mobile, renders as a slide-in overlay with backdrop.
  * 
@@ -43,7 +44,8 @@ export function Sidebar({
     <nav
       className={`
         flex flex-col h-full
-        bg-[var(--bg-secondary)] border-r border-[var(--border-primary)]
+        bg-[var(--sidebar-bg)] border-r border-[var(--border-primary)]
+        backdrop-blur-xl
         transition-[width] duration-300 ease-in-out
         ${isMobile ? 'w-[var(--sidebar-width)]' : isCollapsed ? 'w-[var(--sidebar-collapsed-width)]' : 'w-[var(--sidebar-width)]'}
       `}
@@ -54,7 +56,7 @@ export function Sidebar({
         {isMobile ? (
           <button
             onClick={onCloseMobile}
-            className="p-2 rounded-button hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]"
+            className="p-2 rounded-button hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] transition-colors"
             aria-label="Close navigation"
           >
             <Icon name="x" size={18} />
@@ -62,7 +64,7 @@ export function Sidebar({
         ) : (
           <button
             onClick={onToggle}
-            className="p-2 rounded-button hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]"
+            className="p-2 rounded-button hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] transition-colors"
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           >
             <Icon name={isCollapsed ? 'chevron-right' : 'chevron-left'} size={16} />
@@ -71,40 +73,48 @@ export function Sidebar({
       </div>
 
       {/* Navigation groups */}
-      <div className="flex-1 overflow-y-auto py-3 px-2">
+      <div className="flex-1 overflow-y-auto py-4 px-2">
         {navigationGroups.map((group) => (
-          <div key={group.label} className="mb-4">
+          <div key={group.label} className="mb-5">
             {/* Group label (hidden when collapsed) */}
             {!isCollapsed && (
-              <span className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-tertiary)] block">
+              <span className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)] block">
                 {group.label}
               </span>
             )}
 
             {/* Nav items */}
-            <ul className="space-y-0.5">
+            <ul className="space-y-1">
               {group.items.map((item) => (
                 <li key={item.id}>
                   <NavLink
                     to={item.path}
                     onClick={() => isMobile && onCloseMobile()}
                     className={({ isActive }) => `
-                      flex items-center gap-3 px-3 py-2
-                      rounded-button transition-colors duration-150
+                      relative flex items-center gap-3 px-3 py-2.5
+                      rounded-button transition-all duration-200
                       ${isCollapsed ? 'justify-center' : ''}
                       ${
                         isActive
-                          ? 'bg-accent/10 text-accent border-l-2 border-accent'
-                          : 'text-[var(--text-secondary)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)]'
+                          ? 'bg-[var(--sidebar-item-active)] text-accent shadow-glow-accent-sm'
+                          : 'text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)] hover:text-[var(--text-primary)]'
                       }
                     `.trim()}
                     title={isCollapsed ? item.label : undefined}
                   >
-                    <Icon name={item.icon} size={18} />
-                    {!isCollapsed && (
-                      <span className="text-sm font-medium truncate">
-                        {item.label}
-                      </span>
+                    {({ isActive }) => (
+                      <>
+                        {/* Active indicator bar */}
+                        {isActive && (
+                          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-accent shadow-glow-accent-sm" />
+                        )}
+                        <Icon name={item.icon} size={18} />
+                        {!isCollapsed && (
+                          <span className="text-sm font-medium truncate">
+                            {item.label}
+                          </span>
+                        )}
+                      </>
                     )}
                   </NavLink>
                 </li>
@@ -117,9 +127,12 @@ export function Sidebar({
       {/* Sidebar footer */}
       <div className="px-3 py-3 border-t border-[var(--border-primary)]">
         {!isCollapsed && (
-          <p className="text-[10px] text-[var(--text-tertiary)] text-center">
-            Squicky v0.1.0
-          </p>
+          <div className="flex items-center gap-2 justify-center">
+            <div className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+            <p className="text-[10px] text-[var(--text-tertiary)]">
+              Squicky v0.1.0
+            </p>
+          </div>
         )}
       </div>
     </nav>
@@ -131,7 +144,7 @@ export function Sidebar({
       <>
         {/* Backdrop */}
         <div
-          className="fixed inset-0 bg-black/50 z-[var(--z-overlay)] animate-in fade-in"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[var(--z-overlay)] animate-in fade-in"
           onClick={onCloseMobile}
           aria-hidden="true"
         />

@@ -1,7 +1,7 @@
 /**
- * Header Component
+ * Header Component - Premium Edition
  * 
- * Fixed top header (56px) containing:
+ * Fixed top header (56px) with glassmorphism effect containing:
  * - Logo (left)
  * - Search placeholder (center-left)
  * - Privacy indicator (always visible)
@@ -33,8 +33,8 @@ export function Header({ onMenuToggle, isMobile }: HeaderProps) {
       className="
         fixed top-0 left-0 right-0 z-[var(--z-header)]
         h-header flex items-center px-4
-        bg-[var(--bg-secondary)] border-b border-[var(--border-primary)]
-        backdrop-blur-sm
+        bg-[var(--bg-glass-strong)] border-b border-[var(--border-primary)]
+        backdrop-blur-xl
       "
     >
       {/* Left section: Menu toggle (mobile) + Logo */}
@@ -42,7 +42,7 @@ export function Header({ onMenuToggle, isMobile }: HeaderProps) {
         {isMobile && (
           <button
             onClick={onMenuToggle}
-            className="p-2 rounded-button hover:bg-[var(--bg-hover)] text-[var(--text-secondary)]"
+            className="p-2 rounded-button hover:bg-[var(--bg-hover)] text-[var(--text-secondary)] transition-colors"
             aria-label="Toggle navigation menu"
           >
             <Icon name="menu" size={20} />
@@ -58,12 +58,17 @@ export function Header({ onMenuToggle, isMobile }: HeaderProps) {
             className="
               flex items-center gap-2 px-3 py-1.5
               rounded-button border border-[var(--border-primary)]
-              bg-[var(--bg-primary)] text-[var(--text-tertiary)]
+              bg-[var(--bg-secondary)]/50 text-[var(--text-tertiary)]
               text-sm cursor-text
+              hover:border-[var(--border-accent)] hover:shadow-glow-accent-sm
+              transition-all duration-200
             "
           >
             <Icon name="search" size={16} />
             <span>Search transcripts, modules...</span>
+            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--text-muted)]">
+              /
+            </span>
           </div>
         </div>
       )}
@@ -77,8 +82,8 @@ export function Header({ onMenuToggle, isMobile }: HeaderProps) {
         {/* Session indicator */}
         {!isMobile && (
           <div className="flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-            <Icon name="user" size={14} />
-            <span>Anonymous session</span>
+            <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+            <span>Anonymous</span>
           </div>
         )}
       </div>
