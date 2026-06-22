@@ -84,6 +84,71 @@ Speech Engine --> StandardTranscript (JSON) --> Transcript Studio (loads into lo
 | Creator Studio | Segments + timestamps + full_text | User clicks "Creator Tools" |
 | Business Studio | Segments + speakers + full_text | User clicks "Business Analysis" |
 
+### 1.5 Merged Output Schema (What Other Modules Receive)
+
+When Transcript Studio sends data to another module, it produces a **Merged StandardTranscript** — a valid StandardTranscript with user edits applied:
+
+```json
+{
+  "schema_version": "1.1.0",
+  "id": "new-uuid-for-merged-doc",
+  "created_at": "...",
+  "editing_meta": {
+    "edited_at": "ISO-8601",
+    "source_transcript_id": "original-engine-output-id",
+    "segments_modified": 5,
+    "segments_split": 2,
+    "segments_merged": 1,
+    "segments_deleted": 0
+  },
+  "transcript": {
+    "segments": [
+      {
+        "id": "seg_abc",
+        "sequence_index": 0,
+        "text": "user's final edited text (what they see)",
+        "text_original": "immutable engine output (Devanagari/original script)",
+        "text_display": "same as text (user's version IS the display now)",
+        "user_edited": true,
+        "speaker_id": "spk_001",
+        "...": "all other fields preserved"
+      }
+    ]
+  }
+}
+```
+
+**Key rules:**
+- The merged output IS a valid StandardTranscript (same `schema_version`)
+- New top-level `id` (UUID) generated for the merged document
+- `editing_meta` added (new optional block — additive, non-breaking)
+- Split segments get new UUIDs; merged segments use first segment's ID
+- `sequence_index` recalculated 0-based
+- `transcription_meta` preserved from original (engine info unchanged)
+
+**Field resolution in merged output:**
+
+| Field | Value in merged output | Rationale |
+|-------|----------------------|-----------|
+| `text` | User's edited version (their final corrected text) | This is the user-verified, authoritative content |
+| `text_original` | Immutable engine output (never changes) | For NLP reference, original script access, undo reference |
+| `text_display` | Same as `text` in merged output | After merge, user's edit IS the display |
+| `user_edited` | `true` if user modified this segment, `false` if untouched | Downstream modules know which segments are human-verified |
+| `speaker_id` | May differ from original (if user reassigned) | User corrections override engine diarization |
+
+**How each module uses these fields:**
+
+| Module | Uses `text` (user-edited) | Uses `text_original` (engine) | Uses `user_edited` flag |
+|--------|--------------------------|-------------------------------|------------------------|
+| Export Center | ✅ Exports user's version | Optional (include original as comparison) | ❌ |
+| Subtitle Studio | ✅ Subtitle text from user's version | ❌ | ✅ Trust user-edited timing more |
+| Content Studio | For user-edited segments: ✅ (trusted) | For unedited segments: ✅ (NLP on original script) | ✅ Decides which text to use for NLP |
+| Meeting Intelligence | ✅ Action items from user's version | ❌ | ✅ Higher confidence on edited segments |
+| Creator Studio | ✅ Chapter titles from user's version | ❌ | ❌ |
+| Business Studio | ✅ CRM notes from user's version | ❌ | ❌ |
+
+**Content Studio special logic:** For NLP tasks (summarization, extraction), Content Studio checks per segment: if `user_edited == true`, use `text` (user verified it — higher trust). If `user_edited == false`, use `text_original` (engine output in original script — better for NLP models trained on Devanagari/English). This gives the best quality: human corrections where available, engine's native script where not.
+
 ---
 
 ## 2. UI Layout
@@ -279,18 +344,29 @@ Speech Engine --> StandardTranscript (JSON) --> Transcript Studio (loads into lo
 - On export: source + edits merged into final output
 - "Reset to original" = clear edits array for that segment
 
+**Edit baseline rule:** The `original` field in a `text_change` diff always refers to the value of `text_display` *immediately before that edit was made*. This may be the engine's transliterated output (for first edit) or the result of a previous edit (for subsequent edits). Undo restores to this `original` value. The immutable `text` field (engine raw output) is only accessible via "Reset to original" which discards ALL edits for that segment and regenerates `text_display` from `text` using current transliteration preference.
+
 ### 3.4 Segment Split & Merge
 
 **Split:**
 
 - User places cursor inside a segment's text, presses Enter
 - System creates two new segments:
-  - `seg_new_1`: text before cursor, inherits original start time, end time = midpoint (approximate)
-  - `seg_new_2`: text after cursor, start time = midpoint, inherits original end time
-  - If word timestamps available: use actual word boundary for precise split
+  - `seg_new_1`: text before cursor, inherits original start time
+  - `seg_new_2`: text after cursor, inherits original end time
   - Both inherit `speaker_id` from parent
 - New segment IDs generated as UUIDs (maintaining the `seg_` prefix convention)
 - `sequence_index` values recalculated for all subsequent segments
+
+**Split timestamp calculation:**
+
+| Condition | Method | Precision |
+|-----------|--------|-----------|
+| Word timestamps available | Use `end` time of last word before cursor as split point | High (~0.1s) |
+| No word timestamps (live_origin, etc.) | Proportional: `split_time = start + (end - start) * (chars_before_cursor / total_chars)` | Low (~1-3s) |
+
+- When proportional (approximate) split is used: display a subtle "⏱ approximate" indicator on the new timestamp
+- The indicator tells downstream modules (especially Subtitle Studio) that this timing is estimated, not precise
 
 **Merge:**
 
@@ -551,6 +627,8 @@ SPEAKER TIMELINE
 - Speed resets to 1.0x on new transcript load
 - Keyboard shortcut: `[` to decrease speed, `]` to increase speed (0.25x increments)
 
+**Shortcut scope rule:** All playback shortcuts (Space, `[`, `]`, Up/Down arrows for segment nav) are DISABLED when user is in text edit mode (cursor active inside a segment). Only Escape (exit edit mode), Ctrl+key combinations, and text input keys are active in edit mode. Exiting edit mode (Escape or clicking outside) re-enables all shortcuts.
+
 ---
 
 ## 8. Session Management Strategy
@@ -563,18 +641,26 @@ SPEAKER TIMELINE
 
 ### 8.2 Session Data Storage
 
-| Data | Storage | Lifetime |
-|------|---------|----------|
-| StandardTranscript (from engine) | sessionStorage | Until tab closed or TTL |
-| User edits (edit layer) | localStorage (keyed by transcript ID) | 24 hours (auto-cleanup) |
-| UI preferences (theme, timestamps visible, etc.) | localStorage | Permanent until cleared |
-| Audio blob (if live recording) | Memory / IndexedDB | Session only |
+| Data | Storage | Lifetime | Approx Size |
+|------|---------|----------|-------------|
+| StandardTranscript (from engine) | sessionStorage | Until tab closed or TTL | 200KB-1MB |
+| User edits (edit layer) | localStorage (keyed by transcript ID) | 24 hours (auto-cleanup) | 10-100KB |
+| UI preferences (theme, timestamps visible, etc.) | localStorage | Permanent until cleared | <1KB |
+| Audio blob (if live recording) | IndexedDB | Session only | 10-200MB |
+
+**localStorage budget management (5-10MB limit):**
+- On startup: check `navigator.storage.estimate()` and existing localStorage usage
+- Maximum 3 transcript edit layers stored simultaneously
+- When a 4th transcript arrives: prompt user to export oldest session or auto-discard oldest (>24h)
+- If localStorage nears 80% capacity: show non-blocking warning "Storage is getting full. Export your older sessions."
+- Each edit layer includes a `size_bytes` estimate; large layers (>500KB) trigger earlier cleanup prompts
+- Transcripts themselves stay in sessionStorage (per-tab, cleared on close) — does not compete with localStorage budget
 
 ### 8.3 Session Protection
 
 | Scenario | Protection |
 |----------|-----------|
-| User closes tab with unsaved edits | `beforeunload` event shows browser warning: "You have unsaved changes" |
+| User closes tab with unsaved edits | `beforeunload` event shows browser warning: "You haven't exported your transcript yet. Edits are saved locally but will be cleared after 24 hours." |
 | User navigates away in-app | Confirm dialog: "You have edits that haven't been exported. Leave anyway?" |
 | Session expires (server TTL for result) | Transcript already in sessionStorage; user keeps working. Only audio playback affected. |
 | Browser crash | localStorage edit layer survives; on re-open, offer "Restore previous session?" |
@@ -681,11 +767,12 @@ SPEAKER TIMELINE
 ### Quality Indicator
 
 - Info panel shows: overall confidence % + count of flagged segments
-- Color-coded badge:
-  - Green (>85%): "Good"
-  - Yellow (70-85%): "Fair"
-  - Red (<70%): "Poor" -- with prominent warning banner in editor area
+- Color-coded badge (aligned with Speech Engine quality_label):
+  - Green: "Excellent" (>90%) or "Good" (70-90%)
+  - Yellow: "Fair" (50-70%)
+  - Red: "Poor" (<50%) -- with prominent warning banner in editor area
 - If `quality_label` from engine is "poor": show warning banner at top of transcript: "This transcript has low confidence. Review highlighted sections for accuracy."
+- Transcript Studio ALWAYS uses Speech Engine's `quality_label` value — never calculates its own. The thresholds are authoritative from the engine.
 
 ---
 
@@ -713,8 +800,23 @@ SPEAKER TIMELINE
 ### Script Switching Behavior
 
 - When toggling script: `text_display` regenerated from `text` with new transliteration preference
-- User edits on current script preserved where possible; warning if switching would lose edits
 - Default script preference stored in localStorage
+
+**Script toggle + editing conflict resolution (CRITICAL):**
+
+| Scenario | Behavior |
+|----------|----------|
+| No edits made yet | Script toggle works freely; `text_display` regenerated from `text` |
+| User has made edits | **Script toggle is LOCKED.** Show message: "Script cannot be changed after editing. Export your work, then re-upload to use a different script." |
+| User wants to unlock | "Reset all edits" unlocks script toggle (discards all edits, confirms with user) |
+
+**Rationale for locking (Stage 1 simplicity):**
+- Edits are stored as diffs against `text_display` in the current script
+- Re-transliterating would invalidate all diffs (character positions change, text content changes)
+- Reverse-transliteration is lossy and unreliable
+- Locking prevents silent data loss
+
+**Future upgrade (Stage 2):** Allow script switch after edit by storing edits at word-level with language tags, enabling re-transliteration of only unedited segments. Complex but possible with word-level language data from Speech Engine.
 
 ---
 
