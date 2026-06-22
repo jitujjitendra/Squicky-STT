@@ -32,11 +32,11 @@ export function downloadResult(result: ExportResult): void {
   document.body.appendChild(anchor);
   anchor.click();
 
-  // Cleanup after download starts
+  // Cleanup after download starts (1 second delay ensures download initiated)
   setTimeout(() => {
     document.body.removeChild(anchor);
     URL.revokeObjectURL(url);
-  }, 100);
+  }, 1000);
 }
 
 /**
@@ -59,6 +59,9 @@ export async function downloadBatch(results: ExportResult[]): Promise<void> {
 
 /**
  * Generate a filename for an export
+ *
+ * Pattern: {sanitized_title}_{format}_{YYYYMMDD}.{ext}
+ * Example: meeting_recording_txt_20260622.txt
  */
 export function generateFilename(
   sourceFilename: string,
@@ -67,6 +70,14 @@ export function generateFilename(
 ): string {
   // Strip extension from source filename
   const baseName = sourceFilename.replace(/\.[^.]+$/, '');
-  const sanitized = baseName.replace(/[^a-zA-Z0-9_\-. ]/g, '_');
-  return `${sanitized}_export${extension}`;
+  // Sanitize: lowercase, replace non-alphanumeric with underscore, truncate
+  const sanitized = baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9_\-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 50);
+  // Date stamp
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  return `${sanitized}_${format}_${date}${extension}`;
 }

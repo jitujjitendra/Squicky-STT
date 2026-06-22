@@ -34,13 +34,21 @@ function convert(doc: IntermediateDocument, options: ExportOptions): string {
   const blocks: string[] = [];
 
   for (const segment of doc.segments) {
+    // Timing validation: swap if inverted, skip if both zero
+    let start = segment.start;
+    let end = segment.end;
+    if (start > end) {
+      [start, end] = [end, start]; // Auto-fix: swap inverted timestamps
+    }
+    if (start === 0 && end === 0) continue; // Skip empty-timed segments
+
     const lines: string[] = [];
 
     // Sequence number (1-based)
     lines.push(String(segment.index + 1));
 
     // Timestamp line
-    lines.push(`${formatSrtTimestamp(segment.start)} --> ${formatSrtTimestamp(segment.end)}`);
+    lines.push(`${formatSrtTimestamp(start)} --> ${formatSrtTimestamp(end)}`);
 
     // Text with optional speaker prefix
     let text = segment.text;

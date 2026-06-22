@@ -86,7 +86,12 @@ export function useExportPipeline() {
     try {
       // Stage 1: Receive
       updateProgress('receive', 10, 'Preparing export data...');
-      const payload: ExportPayload = { transcript, formats: selectedFormats, options };
+      const payload: ExportPayload = {
+        source_module: 'transcript-studio', // Default source; other modules override when sending
+        transcript,
+        formats: selectedFormats,
+        options,
+      };
 
       // Stage 2: Validate
       updateProgress('validate', 20, 'Validating export payload...');

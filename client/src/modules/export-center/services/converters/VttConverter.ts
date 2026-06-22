@@ -58,7 +58,7 @@ function convert(doc: IntermediateDocument, options: ExportOptions): string {
     // Text with optional speaker tag using VTT voice span
     let text = segment.text;
     if (options.include_speakers && segment.speaker) {
-      text = `<v ${segment.speaker}>${text}`;
+      text = `<v ${segment.speaker}>${text}</v>`;
     }
     lines.push(text);
     lines.push('');

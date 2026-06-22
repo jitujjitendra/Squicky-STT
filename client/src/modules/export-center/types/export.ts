@@ -60,10 +60,21 @@ export interface ExportOptions {
   template: TemplateName;
 }
 
+/** Source module identifiers for format availability rules */
+export type SourceModule =
+  | 'transcript-studio'
+  | 'subtitle-studio'
+  | 'content-studio'
+  | 'meeting-intelligence'
+  | 'creator-studio'
+  | 'business-studio';
+
 /**
  * Export payload containing source data and configuration
  */
 export interface ExportPayload {
+  /** Which module sent this payload (determines format availability) */
+  source_module: SourceModule;
   /** Source transcript data */
   transcript: StandardTranscript;
   /** Selected export formats */
