@@ -8,6 +8,7 @@
  * - Send to... integration buttons
  */
 
+import { useNavigate } from 'react-router-dom';
 import { Icon, Button } from '@/shared/components';
 import { useTranscriptEditor, useSearch } from '../hooks';
 import { useTranscriptStudioStore } from '../store';
@@ -17,6 +18,28 @@ export function Toolbar() {
   const { toggleSearch, isOpen: isSearchOpen } = useSearch();
   const config = useTranscriptStudioStore((s) => s.config);
   const updateConfig = useTranscriptStudioStore((s) => s.updateConfig);
+  const navigate = useNavigate();
+
+  /** Navigate to target module with transcript context */
+  const navigateTo = (path: string) => {
+    const store = useTranscriptStudioStore.getState();
+    const transcript = store.transcript;
+    if (transcript) {
+      // Store active transcript ID for receiving module
+      sessionStorage.setItem('squicky:active_transcript_id', transcript.id);
+      // Store edit layer if modifications exist
+      const editLayer = store.editLayer;
+      const hasEdits = Object.keys(editLayer.textEdits).length > 0 ||
+        Object.keys(editLayer.speakerChanges).length > 0 ||
+        editLayer.deletedSegments.length > 0 ||
+        Object.keys(editLayer.splits).length > 0 ||
+        Object.keys(editLayer.merges).length > 0;
+      if (hasEdits) {
+        sessionStorage.setItem('squicky:active_edit_layer', JSON.stringify(editLayer));
+      }
+    }
+    navigate(path);
+  };
 
   return (
     <div className="flex items-center gap-2 flex-wrap px-4 py-2 border-b border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-900">
@@ -93,12 +116,12 @@ export function Toolbar() {
 
       {/* Send to integration (desktop only) */}
       <div className="ml-auto hidden lg:flex items-center gap-1">
-        <SendToButton label="Export" path="/export" icon="download" />
-        <SendToButton label="Subtitles" path="/subtitles" icon="subtitles" />
-        <SendToButton label="Content" path="/content" icon="content" />
-        <SendToButton label="Meeting" path="/meeting" icon="meeting" />
-        <SendToButton label="Creator" path="/creator" icon="creator" />
-        <SendToButton label="Business" path="/business" icon="business" />
+        <SendToButton label="Export" path="/export" icon="download" navigate={navigateTo} />
+        <SendToButton label="Subtitles" path="/subtitles" icon="subtitles" navigate={navigateTo} />
+        <SendToButton label="Content" path="/content" icon="content" navigate={navigateTo} />
+        <SendToButton label="Meeting" path="/meeting" icon="meeting" navigate={navigateTo} />
+        <SendToButton label="Creator" path="/creator" icon="creator" navigate={navigateTo} />
+        <SendToButton label="Business" path="/business" icon="business" navigate={navigateTo} />
       </div>
     </div>
   );
@@ -130,15 +153,10 @@ function ToggleButton({
 }
 
 /** Send-to navigation button */
-function SendToButton({ label, path, icon }: { label: string; path: string; icon: string }) {
-  const handleClick = () => {
-    // Navigate to target module (in a real app, would pass transcript context)
-    window.location.href = path;
-  };
-
+function SendToButton({ label, path, icon, navigate }: { label: string; path: string; icon: string; navigate: (path: string) => void }) {
   return (
     <button
-      onClick={handleClick}
+      onClick={() => navigate(path)}
       className="flex items-center gap-1 px-2 py-1 text-xs text-neutral-500 hover:text-accent hover:bg-accent/10 rounded transition-colors"
       title={`Send to ${label}`}
     >
