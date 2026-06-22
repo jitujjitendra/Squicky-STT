@@ -81,12 +81,13 @@ const NEUTRAL_IDF = 2.5;
 const HIGH_IDF = 4.0;
 
 /**
- * Tokenize text into lowercase words, removing punctuation
+ * Tokenize text into lowercase words, removing punctuation.
+ * Uses Unicode-aware regex to preserve non-Latin characters (Hindi/Devanagari, etc.)
  */
 export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^\w\s'-]/g, ' ')
+    .replace(/[^\p{L}\p{N}\s'-]/gu, ' ')
     .split(/\s+/)
     .filter((w) => w.length > 1 && !/^\d+$/.test(w));
 }

@@ -59,6 +59,15 @@ export function useContentGeneration() {
       // Use microtask to allow UI to update
       await new Promise((resolve) => setTimeout(resolve, 0));
 
+      // Performance guard: warn on large transcripts (> 500 segments)
+      // TODO Phase 2: move to Web Worker for transcripts > 500 segments
+      if (transcript.segments.length > 500) {
+        console.warn(
+          `[Content Studio] Large transcript (${transcript.segments.length} segments). ` +
+          `Processing may take several seconds. Web Worker optimization planned for Phase 2.`
+        );
+      }
+
       // Populate or reuse intelligence cache
       let intel = intelligence;
       if (
