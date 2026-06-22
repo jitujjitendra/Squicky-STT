@@ -59,6 +59,12 @@ export function useCreatorGeneration() {
       // Allow UI to update
       await new Promise((resolve) => setTimeout(resolve, 0));
 
+      // Quality warning for poor transcripts
+      const quality = transcript.transcription_meta?.quality;
+      if (quality && quality.quality_label === 'poor') {
+        setError('Low-quality transcript — generated content may be less accurate. Review outputs carefully.');
+      }
+
       // Get or populate intelligence cache
       let intelligence = ContentIntelligenceCache.get();
 
