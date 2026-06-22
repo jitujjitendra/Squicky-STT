@@ -62,28 +62,43 @@ The user selects a business mode which determines: active extractors, prioritize
 
 ### 1.4 ContentIntelligenceCache Interface
 
-Uses the canonical `ContentIntelligenceCache` 9-method interface ONLY. Business-specific logic lives in local derived helpers.
+Uses the **canonical** `ContentIntelligenceCache` interface (defined in Content Studio, Section 7.6). Business-specific logic lives in local derived helpers that consume the canonical methods.
 
 ```typescript
+// CANONICAL interface (authoritative source: Content Studio CS6):
 interface ContentIntelligenceCache {
-  getActions(): CachedAction[];
-  getDecisions(): CachedDecision[];
-  getRisks(): CachedRisk[];
-  getDeadlines(): CachedDeadline[];
-  getTopics(): CachedTopic[];
-  getSpeakerStats(): CachedSpeakerStats[];
-  getSummary(): CachedSummary;
-  getKeyPhrases(): CachedKeyPhrase[];
+  getTopics(): Topic[] | null;
+  getKeywords(): Keyword[] | null;
+  getActionItems(): ActionItem[] | null;
+  getDecisions(): Decision[] | null;
+  getSummary(type: 'short' | 'detailed'): string | null;
+  isPopulated(): boolean;
+  isStale(): boolean;
+  populate(intelligence: ExtractedIntelligence): void;
   invalidate(): void;
 }
 
-// Local derived helpers (NOT on the cache interface)
+// Business Studio local derived helpers (NOT on the cache interface):
+function deriveRisks(transcript: StandardTranscript): Risk[] {
+  // Uses RISK_PATTERNS from @squicky/shared/intelligence-patterns
+}
+function deriveDeadlines(transcript: StandardTranscript): Deadline[] {
+  // Uses DEADLINE_PATTERNS from @squicky/shared/intelligence-patterns
+}
+function deriveSpeakerStats(transcript: StandardTranscript): SpeakerStats[] {
+  // Calculated from segment speaker_id + durations
+}
+function deriveKeyPhrases(cache: ContentIntelligenceCache): KeyPhrase[] {
+  // Derived from cache.getKeywords() — filter by relevance score
+}
 function deriveCustomerPainPoints(cache: ContentIntelligenceCache, transcript: StandardTranscript): PainPoint[];
 function deriveBuyingSignals(cache: ContentIntelligenceCache, transcript: StandardTranscript): BuyingSignal[];
 function deriveObjections(cache: ContentIntelligenceCache, transcript: StandardTranscript): Objection[];
 function deriveCommitments(cache: ContentIntelligenceCache, transcript: StandardTranscript): Commitment[];
 function deriveOpportunities(cache: ContentIntelligenceCache, transcript: StandardTranscript): Opportunity[];
 ```
+
+**Key principle:** The canonical cache interface is NEVER extended by downstream modules. Business Studio derives everything it needs from the 9 existing methods + direct transcript access for business-specific pattern matching.
 
 ### 1.5 Component Hierarchy
 
@@ -116,9 +131,60 @@ Stage 4: Business Insight Extraction --> Stage 5: Attribution --> Stage 6: Outpu
 
 **Stage 1 -- Transcript Input:** Receives `StandardTranscript` from Speech Engine.
 
+**Quality gate (mandatory first check):**
+- Check `transcription_meta.quality_label`:
+  - "excellent" / "good": proceed normally
+  - "fair": proceed + info banner "Transcript quality is moderate — verify extracted commitments and signals before acting on them"
+  - "poor": proceed + prominent warning "Low-quality transcript — business insights may be UNRELIABLE. Review ALL items before sharing with customers or acting on commitments."
+  - null/unknown: proceed + note "Quality unknown — treat all outputs as suggestions"
+- **Why this matters more for Business Studio:** A false "commitment" could damage a customer relationship. A wrong "objection" could misdirect sales strategy. Business context = higher stakes for extraction errors.
+
 **Stage 2 -- Mode Detection:** When no mode is explicitly selected, analyzes first 2 minutes to auto-suggest mode based on keyword frequency matching.
 
 **Stage 3 -- Conversation Analysis:** Identifies speaker roles (host/client/participant), turn patterns, and conversation phases (opening/discovery/presentation/objection/closing).
+
+**Speaker role detection heuristic (Stage 1):**
+
+```typescript
+function detectSpeakerRoles(transcript: StandardTranscript): SpeakerRole[] {
+  const stats = calculateSpeakerStats(transcript);
+  const speakers = stats.sort((a, b) => b.talkTime - a.talkTime);
+
+  if (speakers.length === 1) return [{ ...speakers[0], role: 'host' }];
+
+  if (speakers.length === 2) {
+    // More talk time + more questions = host (drives conversation)
+    const questionsA = countQuestions(speakers[0]);
+    const questionsB = countQuestions(speakers[1]);
+    const host = questionsA >= questionsB ? speakers[0] : speakers[1];
+    const client = host === speakers[0] ? speakers[1] : speakers[0];
+    return [
+      { ...host, role: 'host' },
+      { ...client, role: 'client' }
+    ];
+  }
+
+  // 3+ speakers: most talk time = host, most objection/pain patterns = client, rest = participants
+  return speakers.map((s, i) => ({
+    ...s,
+    role: i === 0 ? 'host' : hasClientPatterns(s) ? 'client' : 'participant'
+  }));
+}
+```
+
+**Confidence:** LOW for role detection. All roles labeled "suggested" and editable by user in Review Workflow. Wrong role assignment = wrong commitment classification (external vs internal), so user review is essential.
+
+**Conversation phase detection (heuristic, approximate):**
+
+| Phase | Detection signal | Typical position |
+|-------|-----------------|-----------------|
+| Opening | Greetings, introductions, "how are you" | First 10% of transcript |
+| Discovery | Questions from host, "tell me about", "what's your" | 10-40% |
+| Presentation | Longer host turns, "let me show/explain", features/benefits | 30-60% |
+| Objection | Objection patterns from client, "but", "however", "concern" | 40-80% |
+| Closing | "next steps", "follow up", "thanks for your time", "wrap up" | Last 15% |
+
+Phase detection is APPROXIMATE — conversations don't follow a rigid structure. Used for: section headers in CRM output, not for logic decisions.
 
 **Stage 4 -- Business Insight Extraction:** Runs all mode-active extractors against transcript segments. Each extractor operates independently.
 
@@ -239,6 +305,39 @@ function calculateDealHealth(signals: BuyingSignal[], risks: DealRisk[], objecti
   return 'cold';
 }
 ```
+
+### 4.7 Objection "Addressed" Detection
+
+An objection is considered "addressed" if within the next 3 speaker turns from the host, ANY counter-pattern appears:
+
+```typescript
+const OBJECTION_COUNTER_PATTERNS_EN = [
+  /\b(actually|let me explain|the reason is|what we offer)\b/i,
+  /\b(think of it as|compared to|the value is|the benefit)\b/i,
+  /\b(I understand|valid point|fair concern|let me address)\b/i,
+];
+
+const OBJECTION_COUNTER_PATTERNS_HI = [
+  /\b(actually ye aise hai|samjhata hoon|dekho)\b/i,
+  /\b(value ye hai|benefit ye hai|compare karo)\b/i,
+  /\b(main samjhta hoon|sahi baat hai|par dekho)\b/i,
+];
+
+function isObjectionAddressed(objection: Objection, subsequentTurns: Segment[]): boolean {
+  // Look at next 3 host turns after the objection
+  const hostTurns = subsequentTurns
+    .filter(s => s.speaker_role === 'host')
+    .slice(0, 3);
+
+  for (const turn of hostTurns) {
+    const allPatterns = [...OBJECTION_COUNTER_PATTERNS_EN, ...OBJECTION_COUNTER_PATTERNS_HI];
+    if (allPatterns.some(p => p.test(turn.text))) return true;
+  }
+  return false;
+}
+```
+
+**Confidence:** MEDIUM. Cannot truly know if customer was satisfied with the response. Only detects that a counter-argument was MADE, not that it was ACCEPTED. Label: "Addressed (response detected)" not "Resolved."
 
 ---
 
@@ -396,14 +495,58 @@ Consumes `ContentIntelligenceCache` canonical 9-method interface. Does NOT exten
 
 ### 8.3 ExportPayload
 
+Aligned with Export Center's canonical contract:
+
 ```typescript
-interface BusinessExportPayload {
-  payload_type: 'business';
-  version: '1.0.0';
-  mode: BusinessMode;
-  data: { dashboard: DashboardModel; crmNotes: CRMExportModel; rawInsights: BusinessInsightExtraction };
+function buildBusinessExportPayload(result: BusinessOutput): ExportPayload {
+  return {
+    source_module: "business-studio",
+    payload_version: "1.0",
+    payload_type: "business",
+    data: {
+      call_summary: result.summary,
+      crm_notes: result.crmNotes.formattedText,
+      follow_ups: result.followUps.map(f => ({
+        who: f.assignee, what: f.task, when: f.deadline
+      })),
+      key_info: {
+        customer_name: result.customerProfile.customerName,
+        company: result.customerProfile.companyName,
+        pain_points: result.customerProfile.painPoints.map(p => p.text),
+        requirements: result.customerProfile.requirements.map(r => r.text)
+      },
+      commitments: {
+        external: result.commitments.filter(c => c.type === 'external'),
+        internal: result.commitments.filter(c => c.type === 'internal')
+      },
+      risks: result.risks.map(r => ({ text: r.text, severity: r.severity })),
+      opportunities: result.opportunities.map(o => ({ text: o.text, type: o.type })),
+      deal_health: result.dealHealth,
+      mode: result.mode
+    },
+    metadata: {
+      title: `Business Notes - ${result.modeLabel} - ${result.dateFormatted}`,
+      duration_sec: result.analytics.totalDuration,
+      language: result.language,
+      speakers: {
+        count: result.analytics.speakerCount,
+        entries: result.speakerEntries
+      },
+      created_at: new Date().toISOString(),
+      quality_label: result.qualityLabel
+    },
+    export_options: {
+      include_timestamps: true,
+      include_speakers: true,
+      include_confidence: false,
+      mode: "detailed",
+      template: "business"
+    }
+  };
 }
 ```
+
+Export Center receives this and renders using the "business" template (executive summary + actions + CRM notes sections).
 
 ### 8.4 Dependency Map
 
