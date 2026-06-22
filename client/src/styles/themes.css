@@ -1,0 +1,64 @@
+/**
+ * Theme Definitions
+ * 
+ * Light and dark themes are implemented via CSS custom properties
+ * scoped to the [data-theme] attribute on <html>.
+ * 
+ * Architecture decision: Using data-theme attribute rather than
+ * prefers-color-scheme allows user override while still respecting
+ * system preference as the default.
+ */
+
+/* ===== Dark Theme (Default) ===== */
+[data-theme="dark"] {
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #2d2d44;
+  --bg-elevated: #252540;
+  --bg-hover: #363654;
+  --bg-active: #404060;
+  
+  --text-primary: #f8f9fa;
+  --text-secondary: #adb5bd;
+  --text-tertiary: #6c757d;
+  --text-muted: #495057;
+  --text-inverse: #1a1a2e;
+  
+  --border-primary: #2d2d44;
+  --border-secondary: #363654;
+  --border-accent: #00d4aa;
+  
+  --surface-card: #1a1a2e;
+  --surface-overlay: rgba(0, 0, 0, 0.6);
+  
+  --scrollbar-track: #1a1a2e;
+  --scrollbar-thumb: #2d2d44;
+  --scrollbar-thumb-hover: #363654;
+}
+
+/* ===== Light Theme ===== */
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f5;
+  --bg-elevated: #ffffff;
+  --bg-hover: #e9ecef;
+  --bg-active: #dee2e6;
+  
+  --text-primary: #1a1a2e;
+  --text-secondary: #495057;
+  --text-tertiary: #6c757d;
+  --text-muted: #adb5bd;
+  --text-inverse: #f8f9fa;
+  
+  --border-primary: #e9ecef;
+  --border-secondary: #dee2e6;
+  --border-accent: #00d4aa;
+  
+  --surface-card: #ffffff;
+  --surface-overlay: rgba(0, 0, 0, 0.4);
+  
+  --scrollbar-track: #f1f3f5;
+  --scrollbar-thumb: #ced4da;
+  --scrollbar-thumb-hover: #adb5bd;
+}
