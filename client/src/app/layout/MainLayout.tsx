@@ -44,7 +44,6 @@ export function MainLayout() {
 
       {/* Sidebar */}
       <Sidebar
-        state={sidebar.state}
         isCollapsed={sidebar.isCollapsed}
         onToggle={sidebar.toggle}
         isMobile={sidebar.isMobile}

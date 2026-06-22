@@ -13,11 +13,8 @@
 import { NavLink } from 'react-router-dom';
 import { Icon } from '@/shared/components/Icon';
 import { navigationGroups } from '@/shared/lib/navigation';
-import type { SidebarState } from '@/types';
 
 interface SidebarProps {
-  /** Current sidebar state */
-  state: SidebarState;
   /** Whether sidebar is collapsed */
   isCollapsed: boolean;
   /** Toggle callback */
