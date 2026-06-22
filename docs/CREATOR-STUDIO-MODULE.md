@@ -142,8 +142,14 @@ directly    Populate cache, then format
 ### 2.1 Entry Points
 
 ```
-Entry Point --> Mode Selection --> Cache Check --> Output Generation --> User Editing --> Export/Copy
+Entry Point --> Quality Check --> Mode Selection --> Cache Check --> Output Generation --> User Editing --> Export/Copy
 ```
+
+**Quality gate (first step):** Before generating any output, check `transcription_meta.quality_label`:
+- "excellent" / "good": proceed normally, no banner
+- "fair": proceed + show info banner "Transcript quality is moderate — generated titles and chapters may need more editing"
+- "poor": proceed + show prominent warning "Low transcript quality — outputs will be less accurate. Review carefully."
+- Creator workflow is NEVER blocked (even poor quality produces something useful — keywords still work)
 
 Users reach Creator Studio via:
 1. Direct sidebar navigation
@@ -169,7 +175,21 @@ Users reach Creator Studio via:
 
 ### 2.3 User Editing Flow
 
-Every output card supports: **Copy** (clipboard), **Edit** (inline with character counter), **Regenerate** (re-format with shuffled keyword order), **Export** (JSON download).
+Every output card supports: **Copy** (clipboard), **Edit** (inline with character counter), **Regenerate** (see below), **Export** (JSON download).
+
+**Regenerate behavior per card type (Stage 1 — extractive is deterministic):**
+
+| Card | What "Regenerate" does |
+|------|----------------------|
+| Title Suggestions | Shuffle keyword order; use 3rd-5th ranked bigrams instead of top 2; add/remove modifier word |
+| Description | Swap takeaway sentences (use 4th-6th ranked instead of top 3); reorder topics |
+| Chapters | Re-run with shifted topic threshold (0.20-0.35 instead of 0.25); may find different boundaries |
+| Tags/Hashtags | Shuffle from top-25 pool (instead of fixed top-15); different subset each time |
+| Highlights | Sample from top-20 (instead of top-10) with weighted random; different moments surface |
+| Show Notes | Shuffle takeaway selection (diversity from different topics) |
+| Pinned Comment | Use 2nd or 3rd highest-scored sentence instead of 1st |
+
+After 3 regenerations on same card: show hint "Try editing directly for best results."
 
 ---
 
@@ -465,7 +485,18 @@ Card states: Default (read-only), Editing (editable + counter), Loading (skeleto
 | Keyword Count | TF-IDF results |
 | Chapter Count | Detected chapters |
 
-**Score mapping:** A (> 10k words), B (5k-10k), C (2k-5k), D (500-2k), F (< 500).
+**Score mapping (composite — word count + transcript quality):**
+
+```
+Quality Score = min(word_count_grade, quality_label_grade)
+
+word_count_grade:    A (>10k words), B (5k-10k), C (2k-5k), D (500-2k), F (<500)
+quality_label_grade: A (excellent), B (good), C (fair), D (poor), F (null/unknown)
+
+Final = LOWER of the two
+```
+
+This ensures a 15,000-word transcript with "poor" quality_label gets score D (not A). Length alone does not equal quality.
 
 ### 7.4 Mode-Specific Card Visibility
 
@@ -501,24 +532,69 @@ Card states: Default (read-only), Editing (editable + counter), Loading (skeleto
 
 ### 8.1 ContentIntelligenceCache Interface
 
+Creator Studio consumes the canonical `ContentIntelligenceCache` interface (defined in Content Studio, Section 7.6). The approved interface provides:
+
 ```typescript
+// CANONICAL interface (from Content Studio — authoritative source):
 interface ContentIntelligenceCache {
-  getTopics(): TopicSegment[];
-  getTopicBoundaries(): BoundaryMarker[];
-  getKeywords(): ScoredKeyword[];
-  getBigrams(): ScoredPhrase[];
-  getTrigrams(): ScoredPhrase[];
-  getScoredSentences(): ScoredSentence[];
-  getTopSentences(n: number): ScoredSentence[];
-  getSummary(): ExtractedSummary;
-  getBlogTemplate(): BlogContent;
-  getSocialTemplates(): SocialContent;
-  getSpeakers(): SpeakerInfo[];
-  getSpeakerSentences(speakerId: string): ScoredSentence[];
+  getTopics(): Topic[] | null;
+  getKeywords(): Keyword[] | null;
+  getActionItems(): ActionItem[] | null;
+  getDecisions(): Decision[] | null;
+  getSummary(type: 'short' | 'detailed'): string | null;
   isPopulated(): boolean;
-  getLastUpdated(): number;
+  isStale(): boolean;
+  populate(intelligence: ExtractedIntelligence): void;
+  invalidate(): void;
 }
 ```
+
+**Creator Studio derives additional data via wrapper utilities (NOT by extending the cache interface):**
+
+```typescript
+// Creator Studio's derived helpers (local to this module, not on cache):
+function getTopicBoundaries(cache: ContentIntelligenceCache): BoundaryMarker[] {
+  const topics = cache.getTopics();
+  if (!topics) return [];
+  return topics.filter(t => t.isBoundary).map(t => ({
+    timestamp: t.startTime,
+    label: t.topicLabel,
+    segmentId: t.segmentId
+  }));
+}
+
+function getBigrams(cache: ContentIntelligenceCache): ScoredPhrase[] {
+  const keywords = cache.getKeywords();
+  if (!keywords) return [];
+  return keywords.filter(k => k.term.split(' ').length === 2);
+}
+
+function getTrigrams(cache: ContentIntelligenceCache): ScoredPhrase[] {
+  const keywords = cache.getKeywords();
+  if (!keywords) return [];
+  return keywords.filter(k => k.term.split(' ').length === 3);
+}
+
+function getSpeakerSentences(speakerId: string, sentences: ScoredSentence[]): ScoredSentence[] {
+  return sentences.filter(s => s.speaker_id === speakerId);
+}
+
+function getTopSentencesDiverse(sentences: ScoredSentence[], n: number): ScoredSentence[] {
+  // Diversity rule: no two from same topic segment
+  const selected: ScoredSentence[] = [];
+  const usedTopics = new Set<string>();
+  for (const s of sentences.sort((a, b) => b.score - a.score)) {
+    if (!usedTopics.has(s.topicId)) {
+      selected.push(s);
+      usedTopics.add(s.topicId);
+    }
+    if (selected.length >= n) break;
+  }
+  return selected;
+}
+```
+
+**Key principle:** The canonical cache interface is NEVER extended by downstream modules. Creator Studio derives what it needs from existing methods. This prevents interface sprawl and keeps the contract stable.
 
 ### 8.2 Shared Intelligence Patterns
 
@@ -685,6 +761,8 @@ ContentIntelligenceCache (sessionStorage)
   }
 }
 ```
+
+**How Export Center handles this:** Export Center does NOT differentiate by `mode`. It renders whatever sections exist in `data` and skips absent ones. The `mode` field is informational metadata (used in export filename: `{title}_{mode}_export.pdf` and document header). YouTube-mode exports have chapters+tags; Podcast-mode exports have show-notes+takeaways — Export Center renders what's present, ignores what's not.
 
 ---
 
