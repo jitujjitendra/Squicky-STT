@@ -131,7 +131,7 @@ StandardTranscript --> Preprocessing --> Analysis --> Intelligence --> Templatin
 
 | Step | Operation | Rationale |
 |------|-----------|-----------|
-| 1 | Merge segments < 5 words with adjacent | Short fragments break analysis |
+| 1 | Merge segments < 5 words with adjacent **same-speaker** segment | Short fragments break analysis; cross-speaker merges corrupt attribution |
 | 2 | Normalize whitespace and punctuation | Consistent NLP input |
 | 3 | Resolve speaker labels to display names | Attribution support |
 | 4 | Build full-text corpus | Document-level analysis |
@@ -145,6 +145,18 @@ interface PreprocessedCorpus {
   speakerTurns: SpeakerTurn[];
   topicSegments: TopicSegment[];
 }
+
+interface ScoredSentence {
+  text: string;
+  score: number;
+  source_segment_id: string;   // which StandardTranscript segment this came from
+  source_char_start: number;   // character offset within that segment
+  source_char_end: number;
+  speaker_id: string | null;
+  timestamp_start: number;     // audio time reference
+}
+// Provenance tracking enables "click output sentence → highlight source segment"
+// in the Content Review Interface. Without this, source highlighting is impossible.
 
 function buildCorpus(transcript: StandardTranscript): PreprocessedCorpus {
   const segments = transcript.segments.map(seg => ({
@@ -165,10 +177,59 @@ function buildCorpus(transcript: StandardTranscript): PreprocessedCorpus {
 
 #### TF-IDF Keyword Extraction
 
-- Term Frequency counted per transcript, compared against pre-built static IDF table (~15K English terms from Wikipedia)
+- Term Frequency counted per transcript, compared against pre-built static IDF tables
 - Score = TF * IDF; high score = important to THIS document but rare generally
 - Also extracts scored bigrams (two-word phrases)
 - **Performance target:** < 500ms for 50,000 words
+
+**IDF Tables Shipped (Multi-Language NLP — Critical for Squicky's Hinglish Audience):**
+
+| Language | Source | Terms | Size (gzipped) | Loaded |
+|----------|--------|-------|-----------------|--------|
+| English | Wikipedia + news corpus | ~15K | ~100KB | Always (core) |
+| Hindi | Hindi Wikipedia + news + web corpus | ~10K | ~80KB | Always (core — Squicky's primary audience) |
+| Combined stop-words | English (~300) + Hindi (~200) | ~500 | ~5KB | Always |
+
+**Language-aware TF-IDF lookup:**
+```typescript
+function getIDF(word: string, language: 'en' | 'hi' | 'mixed'): number {
+  if (language === 'en') return englishIDF[word] ?? NEUTRAL_IDF;
+  if (language === 'hi') return hindiIDF[word] ?? NEUTRAL_IDF;
+  // Mixed/Hinglish: check both tables, use whichever has the word
+  return englishIDF[word] ?? hindiIDF[word] ?? NEUTRAL_IDF;
+}
+// NEUTRAL_IDF = mid-range value (log(N/median_df))
+// Ensures unknown words get a reasonable score, NOT zero
+```
+
+**Why NEUTRAL_IDF (not zero):** If a Hindi word isn't in the IDF table, assigning zero would make TextRank treat it as meaningless — breaking sentence scoring for Hindi content entirely. Mid-range IDF means "we don't know how rare this is, treat it as moderately important."
+
+**Total NLP bundle: ~185KB gzipped** — always loaded (both English + Hindi are core to Squicky's identity).
+
+#### TextRank Language-Aware Sentence Scoring
+
+TextRank uses cosine similarity of TF-IDF vectors between sentences. For Hindi/Hinglish to work:
+
+```typescript
+function buildSentenceVector(sentence: string, language: 'en' | 'hi' | 'mixed'): Map<string, number> {
+  const words = tokenize(sentence, language); // language-aware tokenizer
+  const vector = new Map<string, number>();
+  for (const word of words) {
+    if (isStopWord(word, language)) continue;
+    const tf = countInSentence(word, sentence) / words.length;
+    const idf = getIDF(word, language); // uses correct table
+    vector.set(word, tf * idf);
+  }
+  return vector;
+}
+```
+
+**Tokenization per language:**
+- English: split on whitespace + punctuation
+- Hindi (Devanagari): split on whitespace (Devanagari words are space-separated)
+- Hinglish (Roman): same as English tokenizer (Roman script, space-separated)
+
+This ensures TextRank produces MEANINGFUL scores for Hindi/Hinglish — not random noise.
 
 #### TextRank Sentence Scoring
 
@@ -283,22 +344,61 @@ const FAQ_PATTERNS = [
 **Action Item Extraction:**
 
 ```typescript
-const ACTION_PATTERNS = [
+// English patterns
+const ACTION_PATTERNS_EN = [
   /\b(need to|must|should|have to|going to|will|shall)\s+\w+/i,
   /\b(action item|todo|follow up|next step)s?:?\s*/i,
   /\b(assigned to|responsible for|owner|deadline)\s*/i,
   /\b(let's|we should|we need to|I will|I'll)\s+\w+/i,
   /\b(by (monday|tuesday|wednesday|thursday|friday|tomorrow|next week))\s*/i
 ];
+
+// Hindi/Hinglish patterns (critical for Squicky's Indian audience)
+const ACTION_PATTERNS_HI = [
+  /\b(karna (padega|chahiye|hoga)|zaroorat hai|karna hai)\b/i,
+  /\b(mujhe|humein|aapko)\s+.{5,30}\s+(karna|dena|bhejn?a|banana)\b/i,
+  /\b(main (karunga|kar lunga|karke bhejta|karke deta))\b/i,
+  /\b(kal tak|parso tak|next week tak|is week|agle hafte)\b/i,
+  /\b(action item|todo|follow up|next step)\b/i, // English terms used in Hindi meetings
+  /\b(deadline|due date)\s*(hai|:)/i,
+];
+
+// Combined: run BOTH, merge results, deduplicate by cosine similarity > 0.8
+const ACTION_PATTERNS = [...ACTION_PATTERNS_EN, ...ACTION_PATTERNS_HI];
 ```
 
 **Decision Extraction:**
 
 ```typescript
-const DECISION_PATTERNS = [
+// English patterns
+const DECISION_PATTERNS_EN = [
   /\b(decided|agreed|conclusion|resolved|approved)\b/i,
   /\b(we'll go with|let's go with|the plan is|moving forward with)\b/i,
   /\b(confirmed|locked in|signed off|green light)\b/i
+];
+
+// Hindi/Hinglish patterns
+const DECISION_PATTERNS_HI = [
+  /\b(faisla (hua|kiya|liya)|tay (hua|kiya)|decide (hua|kiya|kar liya))\b/i,
+  /\b(final hai|confirm hai|done hai|pakka hai|fix hai)\b/i,
+  /\b(hum (karenge|jayenge|chalenge|ise use karenge))\b/i,
+  /\b(ye (rakhte|karte|lete) hain)\b/i,
+  /\b(approved hai|green signal|go ahead)\b/i,
+];
+
+const DECISION_PATTERNS = [...DECISION_PATTERNS_EN, ...DECISION_PATTERNS_HI];
+```
+
+**FAQ Question Detection (Hindi-aware):**
+
+```typescript
+const QUESTION_PATTERNS = [
+  // English
+  /^(what|how|why|when|where|who|which|can|could|would|should|is|are|do|does)\s/i,
+  /\?\s*$/,  // ends with ?
+  // Hindi/Hinglish
+  /^(kya|kaise|kyun|kab|kahan|kaun|konsa|kya aap|kya hum)\s/i,
+  /\b(samjha|samjhi|bataiye|bataao)\s*\??\s*$/i,
 ];
 ```
 
@@ -359,6 +459,29 @@ interface ContentTemplate {
   apply(intelligence: IntelligenceResult, analysis: AnalysisResult): TemplatedContent;
   estimateQuality(analysis: AnalysisResult): QualityEstimate;
 }
+```
+
+#### Regenerate Behavior (Stage 1 — Extractive is Deterministic)
+
+TextRank is deterministic: same input = same output always. To make "Regenerate" produce different (but still relevant) results:
+
+```typescript
+interface RegenerateOptions {
+  dampingFactor: number;       // Default 0.85; vary 0.78-0.92
+  topicThreshold: number;      // Default 0.30; vary 0.22-0.38
+  selectionMode: 'strict' | 'weighted-random';  // strict = top-N; weighted = sample from top-2N
+  sentenceOffset: number;      // Skip top-K sentences, start from K+1 (fresh perspective)
+}
+```
+
+**What "Regenerate" does at Stage 1:**
+1. Randomly sample dampingFactor from [0.78, 0.92] (affects which sentences rank highest)
+2. Randomly sample topicThreshold from [0.22, 0.38] (affects how topics are split)
+3. Use `weighted-random` selection: instead of strict top-N, sample from top-2N with probability proportional to score
+4. Result: different but still relevant sentences each time — covers different aspects of the content
+5. After 3 regenerations: show hint "Try a different content type or edit the output manually"
+
+**At Stage 2+ (generative):** Regenerate = re-prompt the model with temperature variation. Genuinely different output each time.
 ```
 
 ### 4.2 Blog Article Template
@@ -560,6 +683,42 @@ EventBus.on('transcript:segment-edited', (id) => contentStore.invalidateCache(id
 EventBus.emit('content:generated', { contentType, result });
 EventBus.emit('content:exported', { contentType, format });
 ```
+
+### 7.6 Shared Intelligence Cache (Cross-Module Consumption)
+
+Content Studio extracts intelligence (topics, keywords, actions, decisions) that other modules also need. Rather than each module re-running extraction, a shared cache provides access:
+
+```typescript
+interface ContentIntelligenceCache {
+  // Accessors (other modules call these)
+  getTopics(): Topic[] | null;          // null if not yet generated
+  getKeywords(): Keyword[] | null;
+  getActionItems(): ActionItem[] | null;
+  getDecisions(): Decision[] | null;
+  getSummary(type: 'short' | 'detailed'): string | null;
+  
+  // State
+  isPopulated(): boolean;
+  isStale(): boolean;     // true if source transcript changed since extraction
+  getGeneratedAt(): number | null;
+  
+  // Mutation (only Content Studio writes)
+  populate(intelligence: ExtractedIntelligence): void;
+  invalidate(): void;     // called when transcript is edited
+}
+```
+
+**How other modules use it:**
+
+| Module | What it reads | Fallback if cache empty |
+|--------|--------------|------------------------|
+| Meeting Intelligence | getActionItems(), getDecisions(), getTopics() | Runs own extraction (same patterns, also populates cache) |
+| Creator Studio | getTopics(), getKeywords() | Runs topic detection only |
+| Business Studio | getActionItems(), getDecisions(), getSummary('short') | Runs own extraction |
+
+**Cache invalidation:** When Transcript Studio emits `transcript:segment-edited`, cache is marked stale. Next access triggers re-extraction. This prevents stale intelligence from propagating to other modules.
+
+**Storage:** In-memory only (RAM). Not persisted to sessionStorage (too large). If Content Studio hasn't been opened, cache is empty and other modules run their own extraction.
 
 ---
 
