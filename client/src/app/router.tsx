@@ -19,7 +19,7 @@
  *   /business ...... Business Studio
  */
 
-import { createBrowserRouter } from 'react-router-dom';
+import { createHashRouter } from 'react-router-dom';
 import { MainLayout } from './layout';
 import { SpeechEnginePage } from '@/modules/speech-engine';
 import { TranscriptStudioPage } from '@/modules/transcript-studio';
@@ -30,7 +30,12 @@ import { MeetingIntelligencePage } from '@/modules/meeting-intelligence';
 import { CreatorStudioPage } from '@/modules/creator-studio';
 import { BusinessStudioPage } from '@/modules/business-studio';
 
-export const router = createBrowserRouter([
+/**
+ * Using createHashRouter for GitHub Pages compatibility.
+ * GitHub Pages doesn't support SPA fallback (all routes → index.html),
+ * so hash-based routing (/#/path) ensures all routes work without server config.
+ */
+export const router = createHashRouter([
   {
     element: <MainLayout />,
     children: [
