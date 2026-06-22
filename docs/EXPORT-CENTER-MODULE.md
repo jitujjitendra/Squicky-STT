@@ -53,13 +53,20 @@ Every module that sends data to Export Center must provide an `ExportPayload`. T
 ```json
 {
   "source_module": "transcript-studio" | "subtitle-studio" | "content-studio" | "meeting-intelligence" | "creator-studio" | "business-studio",
+  "payload_version": "1.0",
   "payload_type": "transcript" | "subtitles" | "content" | "meeting" | "creator" | "business",
   "data": { "...module-specific content..." },
   "metadata": {
     "title": "Meeting Recording - June 2026",
     "duration_sec": 745,
     "language": "hi+en",
-    "speakers": ["Speaker 1", "Speaker 2"],
+    "speakers": {
+      "count": 2,
+      "entries": [
+        { "id": "spk_001", "label": "Speaker 1", "display_name": "Rahul" },
+        { "id": "spk_002", "label": "Speaker 2", "display_name": "Priya" }
+      ]
+    },
     "created_at": "2026-06-21T14:30:00Z",
     "quality_label": "good"
   },
@@ -91,24 +98,37 @@ Every module that sends data to Export Center must provide an `ExportPayload`. T
   "segments": [
     {
       "id": "seg-uuid-001",
+      "sequence_index": 0,
       "start": 0.0,
       "end": 4.5,
       "text": "Hello everyone, welcome to the meeting.",
       "text_original": "hello everyone welcome to the meeting",
       "user_edited": true,
-      "editing_meta": {
-        "edited_at": "2026-06-21T14:35:00Z",
-        "edit_type": "punctuation_correction"
-      },
-      "speaker": "Speaker 1",
+      "speaker_id": "spk_001",
       "confidence": 0.92,
       "language": "en"
     }
   ],
-  "speakers": ["Speaker 1", "Speaker 2"],
-  "full_text": "Hello everyone, welcome to the meeting. ..."
+  "speakers": {
+    "count": 2,
+    "entries": [
+      { "id": "spk_001", "label": "Speaker 1", "display_name": "Rahul" },
+      { "id": "spk_002", "label": "Speaker 2", "display_name": "Priya" }
+    ],
+    "speaking_time": { "spk_001": 500.2, "spk_002": 244.8 }
+  },
+  "full_text": "Hello everyone, welcome to the meeting. ...",
+  "editing_meta": {
+    "edited_at": "2026-06-21T14:35:00Z",
+    "segments_modified": 5,
+    "segments_split": 0,
+    "segments_merged": 0,
+    "segments_deleted": 0
+  }
 }
 ```
+
+> **Note on text fields:** In the merged output from Transcript Studio, `text` = user's final edited version (authoritative), `text_original` = immutable engine output (for reference/NLP). Export Center uses `text` for all human-facing formats and preserves both in JSON full export.
 
 ### 1.3 Architecture Diagram
 
@@ -269,9 +289,47 @@ Validation rules applied before any generation begins:
 | CSV | `payload_type === "meeting"` or `"business"` (tabular data) |
 | All others | Any payload type |
 
+#### Step 2.5: Data Preparation (Speaker Resolution + Text Normalization)
+
+After validation passes, data is prepared for template consumption. This step ensures templates receive clean, resolved, ready-to-render data — not raw schema internals.
+
+**Speaker resolution:**
+```
+For each segment:
+  segment.speaker_name = resolve(segment.speaker_id, metadata.speakers.entries)
+
+resolve(speaker_id, entries):
+  entry = entries.find(e => e.id === speaker_id)
+  return entry.display_name ?? entry.label ?? "Unknown Speaker"
+```
+
+**Text field normalization for export:**
+
+| Format | Text field used for export | Rationale |
+|--------|---------------------------|-----------|
+| TXT, MD, DOCX, PDF, HTML | `segment.text` (user's edited version) | User's corrections are authoritative |
+| SRT, VTT, ASS | `segment.text` (user's version) | What user verified = what appears as subtitle |
+| JSON (full export) | Both `text` + `text_original` preserved | Developer use; full data for reference/re-import |
+| CSV | `segment.text` (user's version) | Tabular export of user-verified content |
+
+**Timestamp formatting:**
+- Convert raw seconds (float) to display format based on `export_options.timestamp_format`
+- Default: `HH:MM:SS` for audio >1hr, `MM:SS` for shorter
+
+**Output of Step 2.5:** A `PreparedPayload` where:
+- All `speaker_id` values resolved to human-readable names
+- `text` field is the export-ready text (user's version)
+- `text_original` preserved for JSON full export only
+- Timestamps are in display format strings
+- Confidence flags set (low confidence segments marked)
+
+Templates NEVER need to look up speaker entries or decide which text field to use — that's already done.
+
 #### Step 3: Template Application
 
 The template engine selects the appropriate template based on `export_options.template` and applies formatting rules. Output is always an `IntermediateDocument` (see Section 4 for full template system design).
+
+**Important:** By the time data reaches the template, it has been through the Data Preparation step (Step 2.5) and all speaker IDs are resolved to display names, text fields are normalized, and timestamps are in display format.
 
 #### Step 4: Format Conversion
 
@@ -1279,6 +1337,21 @@ The PDF export uses **jsPDF** (core rendering) and **jsPDF-autotable** (table ge
 - **Font embedding:** Subset embedding to minimize file size
 - **Fallback:** If Noto Sans unavailable, use Helvetica (built into jsPDF, Latin only)
 - **Hindi support:** Critical for Squicky (Hindi-English platform); Noto Sans Devanagari subset loaded on demand
+
+**Font bundling strategy (maintains "zero network calls" guarantee):**
+
+| Font | Size (subset) | Loading | Bundled with app? |
+|------|---------------|---------|-------------------|
+| Noto Sans Latin | ~50KB | Always loaded (core) | Yes (in main bundle) |
+| Noto Sans Devanagari | ~400KB | Lazy-loaded on first Hindi PDF export | Yes (in separate chunk, not CDN) |
+| Noto Sans Mono | ~30KB | Lazy-loaded on first PDF with timestamps | Yes (in separate chunk) |
+
+**Key decision:** All fonts are bundled within the app build (as separate lazy-loadable chunks), NOT fetched from Google Fonts CDN or any external source. This means:
+- First Hindi PDF export may have a ~200ms delay loading the font chunk from the app bundle
+- Subsequent exports use the cached module (instant)
+- Works fully offline — no network dependency ever
+- Adds ~480KB to total app deployment size (acceptable for full Hindi+English PDF support)
+- If user never exports PDF with Hindi, the Devanagari font chunk is never loaded (tree-shaking)
 
 ### 14.5 PDF Layout Specifications
 
