@@ -386,8 +386,13 @@ The platform specification is comprehensive, architecturally sound, and internal
 |---|-----------|--------|--------|
 | 1 | **Write `docs/SHARED-CONTRACTS.md`** containing canonical definitions of ContentIntelligenceCache, ExportPayload, EventBus events, and sessionStorage key conventions. ONE source of truth that all module docs reference. | 1 day | All cross-module integration |
 | 2 | **Decide: Pure client-side (Hostinger) OR tiny VPS.** This determines Speech Engine architecture for Sprint 1. Recommendation: pure client-side. | 1 hour (decision) | Sprint 1 architecture |
-| 3 | **Source or generate Hindi IDF table.** 10K most common Hindi terms with inverse document frequency scores. Required for Hinglish intelligence to function. | 1-2 days | Content Studio Hindi mode |
-| 4 | **Prototype WASM model loading.** Verify: does whisper-tiny.wasm work in Chrome mobile with acceptable performance (< 3x realtime on mid-range phone)? | 1 day | Speech Engine mobile viability |
+| 3 | **Prototype WASM model loading.** Verify: does whisper-tiny.wasm work in Chrome mobile with acceptable performance (< 3x realtime on mid-range phone)? | 1 day | Speech Engine mobile viability |
+
+**Pre-Phase 2 condition (NOT blocking Sprint 1):**
+
+| # | Condition | Effort | Blocks |
+|---|-----------|--------|--------|
+| 4 | **Source or generate Hindi IDF table.** 10K most common Hindi terms with inverse document frequency scores. Required for Hinglish intelligence to function. | 1-2 days | Content Studio Hindi mode (Phase 2) |
 
 ### Timeline to Resolve
 
@@ -414,6 +419,272 @@ The 10-document specification represents thorough product thinking. The platform
 5. Progressive enhancement (each phase is independently shippable)
 
 **Proceed to implementation with Phase 1 (Speech Engine + Transcript Studio + Export Center) after resolving the 4 pre-conditions listed above.**
+
+---
+
+## 13. Platform Testing Strategy
+
+### 13.1 Test Architecture
+
+| Layer | Scope | Tool | Coverage Target |
+|-------|-------|------|-----------------|
+| Unit | Individual functions, patterns, formatters | Vitest | 80% minimum |
+| Component | React components (render, interaction) | Vitest + Testing Library | Critical components only |
+| Integration | Module boundaries (data flow between modules) | Vitest | Every cross-module contract |
+| E2E | Critical user paths (upload → transcript → export) | Playwright | Top 5 user flows |
+| Accessibility | WCAG 2.1 AA compliance | axe-core + manual keyboard | Every module at phase completion |
+| Performance | Bundle size, render time, pipeline speed | Lighthouse + custom benchmarks | Phase gate criteria |
+
+### 13.2 Cross-Module Integration Tests
+
+```
+Test: Speech Engine → Transcript Studio
+  Verify: StandardTranscript produced by engine loads correctly in editor
+
+Test: Transcript Studio → Export Center
+  Verify: Merged output (with edits) produces valid ExportPayload
+
+Test: Transcript Studio → Content Studio
+  Verify: ContentIntelligenceCache populated correctly from edited transcript
+
+Test: Content Studio → Creator Studio
+  Verify: Creator Studio reads cache without triggering re-extraction
+
+Test: Content Studio → Meeting Intelligence
+  Verify: Shared patterns produce identical results when accessed from either module
+
+Test: All modules → Export Center
+  Verify: Each module's ExportPayload passes Export Center validation
+```
+
+### 13.3 CI Pipeline (GitHub Actions Free Tier)
+
+```
+On every push:
+  1. Lint (ESLint + TypeScript strict)
+  2. Unit tests (Vitest, parallel)
+  3. Build (Vite production build)
+  4. Bundle size check (fail if > 300KB initial, > 50MB total with models)
+
+On PR to main:
+  5. Integration tests
+  6. Accessibility audit (axe-core)
+  7. Performance benchmark (Lighthouse CI)
+
+On merge to main:
+  8. Deploy to staging
+  9. E2E tests against staging
+  10. Deploy to production (if E2E pass)
+```
+
+### 13.4 Phase Gate Test Criteria
+
+No phase proceeds until:
+- Zero failing unit tests
+- Zero Critical accessibility violations
+- Integration tests pass for all cross-module boundaries
+- Bundle size within budget
+- Performance targets met (from each module's spec)
+
+---
+
+## 14. Deployment Strategy
+
+### 14.1 Recommended: Vercel Free Tier (better than Hostinger for SPAs)
+
+| Option | Cost | Capability | Limitation |
+|--------|------|-----------|-----------|
+| **Vercel (recommended)** | $0/month (free hobby) | Automatic deploys from GitHub, global CDN, HTTPS, preview per PR | 100GB bandwidth/month, 1 concurrent build |
+| Netlify | $0/month (free starter) | Same as Vercel | 100GB bandwidth, 300 build min/month |
+| Hostinger shared | $3-5/month | Static file hosting | Manual deploy, no CDN, no preview URLs |
+| GitHub Pages | $0/month | Static hosting from repo | No build step, limited routing |
+
+**Recommendation:** Vercel free tier. Reasons:
+- Zero cost
+- Automatic deploy on git push (no FTP, no manual steps)
+- Preview URL per PR (team review without merging)
+- Global CDN (fast load everywhere including India)
+- HTTPS automatic
+- SPA routing support (works with React Router)
+- Can upgrade to paid ($20/month) when needed without migration
+
+### 14.2 Deploy Pipeline
+
+```
+Developer pushes to branch → GitHub → Vercel builds → Preview URL generated
+PR merged to main → Vercel auto-deploys to production URL
+```
+
+### 14.3 Environment Strategy
+
+| Environment | URL | Purpose | Deploy trigger |
+|-------------|-----|---------|----------------|
+| Production | squicky.app (or custom domain) | Live users | Merge to main |
+| Staging | staging.squicky.app | Pre-release testing | Push to `staging` branch |
+| Preview | random-url.vercel.app | PR review | Every PR auto-generates |
+| Local | localhost:5173 | Development | `npm run dev` |
+
+### 14.4 Cache Busting
+
+Vite generates hashed filenames for all assets (e.g., `main.a3b4c5.js`). Browser cache never serves stale code. No Service Worker needed at Stage 1.
+
+---
+
+## 15. Error Monitoring Strategy
+
+### 15.1 Client-Side Error Reporting
+
+**Recommended: Sentry Free Tier (10K events/month)**
+
+| Feature | Implementation |
+|---------|---------------|
+| Unhandled exceptions | Automatic capture via `window.onerror` + `unhandledrejection` |
+| WASM crashes | Caught in try/catch around transcription, reported with metadata |
+| Performance issues | Web Vitals (LCP, FID, CLS) sent as metrics |
+| User context | Anonymous session ID only (NO transcript content, NO PII) |
+| Source maps | Uploaded to Sentry on deploy for readable stack traces |
+
+### 15.2 Privacy-Safe Error Reporting
+
+| What IS reported | What is NEVER reported |
+|------------------|----------------------|
+| Error type + stack trace | Transcript text content |
+| Browser + OS version | Audio/video data |
+| Module name + action | Speaker names |
+| Session anonymous ID | File names (beyond hash) |
+| WASM model + size | User's IP (if Sentry anonymization enabled) |
+| Performance metrics | Export content |
+
+### 15.3 Error Budget
+
+| Metric | Target | Action if exceeded |
+|--------|--------|--------------------|
+| Error rate (unhandled) | < 1% of sessions | Hotfix within 24 hours |
+| WASM crash rate | < 5% of transcription attempts | Investigate device/browser pattern |
+| Export failure rate | < 0.5% | Fallback to TXT always works |
+
+### 15.4 Stage 1 Minimum (if Sentry not wanted)
+
+At absolute minimum: `console.error` + a simple "Report Issue" button that lets user describe the problem. No automatic reporting. Least privacy-invasive but also least informative.
+
+---
+
+## 16. Browser Support Matrix
+
+### 16.1 Required Features by Module
+
+| Feature | Chrome | Firefox | Safari | Edge |
+|---------|--------|---------|--------|------|
+| WASM (transcription) | 57+ | 52+ | 11+ | 79+ |
+| Web Workers | 4+ | 3.5+ | 4+ | 12+ |
+| MediaRecorder (recording) | 47+ | 25+ | 14.1+ | 79+ |
+| Web Speech API (live) | 33+ | ❌ None | 14.1+ (partial) | 79+ |
+| sessionStorage | All | All | All | All |
+| URL.createObjectURL | All | All | All | All |
+| CSS Custom Properties | 49+ | 31+ | 9.1+ | 16+ |
+
+### 16.2 Minimum Browser Versions
+
+| Browser | Minimum Version | User Base Coverage |
+|---------|----------------|-------------------|
+| **Chrome** (primary) | 90+ (March 2021) | ~95% of Chrome users |
+| **Edge** | 90+ (Chromium-based) | ~95% of Edge users |
+| **Firefox** | 100+ (May 2022) | ~90% of Firefox users |
+| **Safari** | 15.4+ (March 2022) | ~85% of Safari users |
+| **Mobile Chrome** | 90+ | Primary mobile target |
+| **Mobile Safari** | 15.4+ | Secondary mobile |
+
+### 16.3 Feature Degradation
+
+| If missing... | Degradation |
+|---------------|-------------|
+| Web Speech API (Firefox/Safari) | Live recording hidden. Batch upload only. Show: "Live transcription requires Chrome." |
+| MediaRecorder (old Safari) | Record button hidden. Upload only. |
+| WASM slow (old mobile) | Show warning: "Processing may be very slow. Try a shorter file." Offer server fallback when VPS exists. |
+| sessionStorage disabled | Show error: "Storage is disabled. Enable cookies/storage for this site." |
+
+### 16.4 Detection Strategy
+
+```typescript
+const browserSupport = {
+  wasm: typeof WebAssembly !== 'undefined',
+  webWorker: typeof Worker !== 'undefined',
+  mediaRecorder: typeof MediaRecorder !== 'undefined',
+  webSpeech: 'SpeechRecognition' in window || 'webkitSpeechRecognition' in window,
+  sessionStorage: (() => { try { sessionStorage.setItem('t','t'); sessionStorage.removeItem('t'); return true; } catch { return false; } })(),
+};
+```
+
+Show unsupported features as disabled with explanation tooltip. Never crash — always degrade.
+
+---
+
+## 17. Versioning & Release Strategy
+
+### 17.1 Platform Versioning
+
+| Component | Versioning | Example |
+|-----------|-----------|---------|
+| Platform (overall) | Semver: MAJOR.MINOR.PATCH | v1.0.0 (Phase 1 launch) |
+| StandardTranscript schema | Semver (critical) | v1.1.0 (current) |
+| ExportPayload contract | Semver | v1.0.0 |
+| ContentIntelligenceCache | Semver | v1.0.0 |
+| Individual modules | Tied to platform version | — |
+
+### 17.2 Release Schedule
+
+| Phase completion | Platform version | Notes |
+|------------------|-----------------|-------|
+| Phase 1 shipped | v1.0.0 | MVP: upload → transcribe → edit → export |
+| Phase 2 shipped | v1.1.0 | Intelligence + subtitles added |
+| Phase 3 shipped | v1.2.0 | All 8 modules operational |
+| Phase 4 shipped | v1.3.0 | PDF/DOCX + mobile + accessibility |
+
+### 17.3 Update Strategy (SPA)
+
+- **Automatic:** Vite hashed assets ensure fresh code on each page load (no stale JS)
+- **No Service Worker at Stage 1:** Avoids cache invalidation complexity
+- **Stage 2+:** Add Service Worker for offline WASM model caching only (not app shell)
+- **Breaking changes:** If StandardTranscript schema changes (major version), old cached data in sessionStorage is invalid → clear on version mismatch
+
+```typescript
+const APP_VERSION = '1.0.0';
+const storedVersion = sessionStorage.getItem('squicky:version');
+if (storedVersion && storedVersion !== APP_VERSION) {
+  sessionStorage.clear(); // Invalidate all old data
+}
+sessionStorage.setItem('squicky:version', APP_VERSION);
+```
+
+---
+
+## 18. Timeline Assumptions & Team Model
+
+### 18.1 Effort Estimate Assumptions
+
+The 12-week build order assumes:
+- **1 full-time developer** working 6-8 productive hours/day
+- Developer is proficient in: React + TypeScript, Vite, Web APIs (WASM, Workers, MediaRecorder)
+- No multi-week blockers (WASM prototype works, IDF table sourced)
+- No feature scope changes during phase
+
+### 18.2 Adjusted Timelines
+
+| Team size | Estimated total | Notes |
+|-----------|-----------------|-------|
+| 1 developer (full-time) | 14-18 weeks (realistic) | 12 weeks is optimistic; add buffer |
+| 1 developer (part-time, 4h/day) | 24-30 weeks | |
+| 2 developers (full-time) | 8-10 weeks | Parallel phases possible |
+| 1 dev + 1 designer | 12-14 weeks | Designer handles UI components while dev handles logic |
+
+### 18.3 Solo Developer Strategy
+
+If one developer (most likely for near-zero budget):
+1. **Phase 1 is all that matters initially.** Ship MVP in 4-6 weeks.
+2. Phase 2-3 can be deferred indefinitely without losing MVP value.
+3. Prioritize: Speech Engine + Transcript Studio FIRST. Export Center can be minimal (TXT + MD only at start).
+4. Don't attempt mobile optimization until desktop works perfectly.
+5. Skip PDF/DOCX export until Phase 4 (use MD/TXT for now).
 
 ---
 
