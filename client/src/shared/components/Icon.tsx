@@ -27,6 +27,21 @@ interface IconProps {
  * Each icon uses a 24x24 viewBox with stroke-based design
  */
 const icons: Record<string, React.ReactNode> = {
+  // Platform icons
+  home: (
+    <path
+      d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
+  grid: (
+    <path
+      d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  ),
   // Navigation icons
   mic: (
     <path

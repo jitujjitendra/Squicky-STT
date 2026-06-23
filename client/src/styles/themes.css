@@ -39,6 +39,9 @@
   --scrollbar-thumb: #1a2238;
   --scrollbar-thumb-hover: #253046;
   
+  /* Upload zone */
+  --upload-zone-bg: linear-gradient(to bottom, #1a2238, #141b2d);
+
   /* Sidebar specific */
   --sidebar-bg: rgba(10, 13, 22, 0.95);
   --sidebar-item-active: rgba(0, 212, 170, 0.08);
@@ -76,6 +79,9 @@
   --scrollbar-thumb: #d4dae2;
   --scrollbar-thumb-hover: #bfc6d2;
   
+  /* Upload zone */
+  --upload-zone-bg: linear-gradient(to bottom, #ffffff, #f3f0ff);
+
   /* Sidebar specific */
   --sidebar-bg: #ffffff;
   --sidebar-item-active: rgba(0, 180, 140, 0.06);
