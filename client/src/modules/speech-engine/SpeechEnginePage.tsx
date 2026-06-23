@@ -51,10 +51,10 @@ export function SpeechEnginePage() {
   };
 
   return (
-    <div className="flex flex-col items-center px-4 py-8">
+    <div className="flex flex-col items-center px-4 sm:px-6 lg:px-8 py-6 md:py-10">
       {/* Page header */}
-      <div className="text-center mb-10">
-        <h1 className="text-4xl font-bold text-[var(--text-primary)] mb-3" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
+      <div className="text-center mb-8 md:mb-10">
+        <h1 className="text-3xl md:text-4xl font-bold text-[var(--text-primary)] mb-3" style={{ fontFamily: 'Georgia, "Times New Roman", serif' }}>
           Speech
         </h1>
         <p className="text-[var(--text-secondary)] text-sm max-w-md mx-auto leading-relaxed">

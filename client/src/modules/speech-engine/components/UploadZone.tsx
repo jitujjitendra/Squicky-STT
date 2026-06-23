@@ -29,7 +29,7 @@ export function UploadZone() {
   } = useFileUpload();
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
+    <div className="w-full max-w-2xl mx-auto px-2 sm:px-0">
       {/* Drop zone with dashed border and gradient background */}
       <div
         onDragEnter={handleDragEnter}
