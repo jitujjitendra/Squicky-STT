@@ -30,7 +30,7 @@ export function UploadZone() {
 
   return (
     <div className="w-full max-w-2xl mx-auto">
-      {/* Drop zone with gradient border */}
+      {/* Drop zone with dashed border and gradient background */}
       <div
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -55,33 +55,24 @@ export function UploadZone() {
           group
           ${
             isDragOver
-              ? 'bg-accent/5 scale-[1.01] shadow-glow-accent ring-2 ring-accent/30'
-              : 'bg-[var(--surface-card)] hover:bg-[var(--surface-card-hover)]'
+              ? 'scale-[1.01] border-accent ring-2 ring-accent/30'
+              : ''
           }
           ${isUploading ? 'pointer-events-none opacity-70' : ''}
-          border border-[var(--border-primary)]
-          hover:border-[var(--border-accent)] hover:shadow-glow-accent-sm
+          border-2 border-dashed border-accent/40
+          hover:border-accent/70
         `}
+        style={{ background: 'linear-gradient(to bottom, #ffffff, #f3f0ff)' }}
       >
-        {/* Gradient border overlay */}
-        <div className="absolute inset-0 rounded-card-lg overflow-hidden pointer-events-none">
-          <div className="absolute inset-0 rounded-card-lg p-[1px] opacity-30 group-hover:opacity-60 transition-opacity duration-300">
-            <div className="absolute inset-0 rounded-card-lg bg-gradient-to-br from-accent/30 via-transparent to-accent-secondary-light/30" />
-          </div>
-        </div>
-
-        {/* Animated background orb */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-accent/5 blur-3xl group-hover:bg-accent/10 transition-all duration-500 pulse-glow pointer-events-none" />
-
-        {/* Animated icon */}
+        {/* Mic icon */}
         <div
           className={`
-            relative w-20 h-20 rounded-2xl flex items-center justify-center mb-6
+            relative w-20 h-20 rounded-full flex items-center justify-center mb-6
             transition-all duration-300
             ${
               isDragOver
-                ? 'bg-accent/20 text-accent scale-110 shadow-glow-accent'
-                : 'bg-accent/10 text-accent group-hover:bg-accent/15 group-hover:shadow-glow-accent-sm'
+                ? 'bg-accent/20 text-accent scale-110'
+                : 'bg-accent/10 text-accent group-hover:bg-accent/15'
             }
           `}
         >
