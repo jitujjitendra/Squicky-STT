@@ -2,9 +2,8 @@
  * Navigation Configuration
  * 
  * Centralized navigation data used by sidebar and routing.
- * Modules are grouped into CORE (primary workflow) and STUDIOS
- * (specialized tools). This structure makes it easy to add
- * new modules without touching layout components.
+ * Modules are grouped into PLATFORM (homepage/dashboard), CORE (primary workflow)
+ * and STUDIOS (specialized tools).
  * 
  * Architecture decision: Navigation is data-driven to support
  * future features like role-based access control, module
@@ -15,12 +14,35 @@ import type { NavGroup } from '@/types';
 
 export const navigationGroups: NavGroup[] = [
   {
+    label: 'PLATFORM',
+    items: [
+      {
+        id: 'homepage',
+        label: 'Homepage',
+        path: '/',
+        icon: 'home',
+        description:
+          'Return to the Squicky STT landing page with platform overview and branding.',
+        isActive: true,
+      },
+      {
+        id: 'dashboard',
+        label: 'Dashboard',
+        path: '/dashboard',
+        icon: 'grid',
+        description:
+          'Central hub showing all available modules and quick access to every tool.',
+        isActive: true,
+      },
+    ],
+  },
+  {
     label: 'CORE',
     items: [
       {
         id: 'speech-engine',
         label: 'Speech Engine',
-        path: '/',
+        path: '/speech-engine',
         icon: 'mic',
         description:
           'Upload and process audio files with AI-powered speech recognition. Supports multiple formats and languages with privacy-first local processing.',
