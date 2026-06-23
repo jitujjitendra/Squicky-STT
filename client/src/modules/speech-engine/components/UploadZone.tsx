@@ -62,7 +62,7 @@ export function UploadZone() {
           border-2 border-dashed border-accent/40
           hover:border-accent/70
         `}
-        style={{ background: 'linear-gradient(to bottom, #ffffff, #f3f0ff)' }}
+        style={{ background: 'var(--upload-zone-bg, linear-gradient(to bottom, #ffffff, #f3f0ff))' }}
       >
         {/* Mic icon */}
         <div
@@ -136,8 +136,8 @@ export function UploadZone() {
               key={idx}
               className="flex items-start gap-2 p-3 rounded-card bg-red-500/5 border border-red-500/20"
             >
-              <Icon name="x" size={16} className="text-red-400 mt-0.5 shrink-0" />
-              <span className="text-sm text-red-300">{error}</span>
+              <Icon name="x" size={16} className="text-red-500 mt-0.5 shrink-0" />
+              <span className="text-sm text-red-600 dark:text-red-300">{error}</span>
             </div>
           ))}
         </div>

@@ -15,66 +15,15 @@
 
 import { Link } from 'react-router-dom';
 
-/** Inline SVG squirrel mascot using brand colors */
-function SquirrelMascot({ className = '' }: { className?: string }) {
+/** Squicky brand mascot using the official SVG logo asset */
+function SquickyMascot({ className = '' }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 200 200"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
+    <img
+      src="/squicky.svg"
+      alt="Squicky squirrel mascot"
       className={className}
-      aria-label="Squicky squirrel mascot"
-      role="img"
-    >
-      {/* Body */}
-      <ellipse cx="100" cy="130" rx="40" ry="50" fill="#00d4aa" opacity="0.9" />
-      {/* Head */}
-      <circle cx="100" cy="75" r="32" fill="#00d4aa" />
-      {/* Ears */}
-      <ellipse cx="78" cy="50" rx="10" ry="14" fill="#00d4aa" />
-      <ellipse cx="122" cy="50" rx="10" ry="14" fill="#00d4aa" />
-      <ellipse cx="78" cy="50" rx="6" ry="9" fill="#8b5cf6" opacity="0.6" />
-      <ellipse cx="122" cy="50" rx="6" ry="9" fill="#8b5cf6" opacity="0.6" />
-      {/* Eyes */}
-      <circle cx="88" cy="72" r="6" fill="#1a1a2e" />
-      <circle cx="112" cy="72" r="6" fill="#1a1a2e" />
-      <circle cx="90" cy="70" r="2" fill="white" />
-      <circle cx="114" cy="70" r="2" fill="white" />
-      {/* Nose */}
-      <ellipse cx="100" cy="82" rx="4" ry="3" fill="#1a1a2e" />
-      {/* Cheeks */}
-      <circle cx="82" cy="80" r="4" fill="#8b5cf6" opacity="0.3" />
-      <circle cx="118" cy="80" r="4" fill="#8b5cf6" opacity="0.3" />
-      {/* Tail */}
-      <path
-        d="M130 120 C160 100 170 70 150 50 C140 40 130 55 135 75 C138 90 135 110 130 120"
-        fill="#00d4aa"
-        opacity="0.8"
-      />
-      <path
-        d="M132 115 C155 98 162 72 148 55 C142 48 135 60 138 75 C140 88 137 105 132 115"
-        fill="#8b5cf6"
-        opacity="0.3"
-      />
-      {/* Arms */}
-      <ellipse cx="68" cy="125" rx="8" ry="16" fill="#00d4aa" opacity="0.85" transform="rotate(-15 68 125)" />
-      <ellipse cx="132" cy="125" rx="8" ry="16" fill="#00d4aa" opacity="0.85" transform="rotate(15 132 125)" />
-      {/* Feet */}
-      <ellipse cx="85" cy="175" rx="12" ry="7" fill="#00d4aa" opacity="0.85" />
-      <ellipse cx="115" cy="175" rx="12" ry="7" fill="#00d4aa" opacity="0.85" />
-      {/* Belly */}
-      <ellipse cx="100" cy="135" rx="22" ry="28" fill="white" opacity="0.3" />
-      {/* Headphones detail */}
-      <path
-        d="M70 68 C70 50 80 42 100 42 C120 42 130 50 130 68"
-        stroke="#8b5cf6"
-        strokeWidth="4"
-        fill="none"
-        strokeLinecap="round"
-      />
-      <rect x="65" y="64" width="10" height="14" rx="4" fill="#8b5cf6" />
-      <rect x="125" y="64" width="10" height="14" rx="4" fill="#8b5cf6" />
-    </svg>
+      draggable={false}
+    />
   );
 }
 
@@ -163,15 +112,15 @@ export function HomePage() {
 
           {/* Nav Links */}
           <div className="hidden md:flex items-center gap-6">
-            <a href="#features" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+            <button onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
               Features
-            </a>
-            <a href="#privacy" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+            </button>
+            <button onClick={() => document.getElementById('privacy')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
               Privacy
-            </a>
-            <a href="#modules" className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
+            </button>
+            <button onClick={() => document.getElementById('modules')?.scrollIntoView({ behavior: 'smooth' })} className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors">
               Modules
-            </a>
+            </button>
           </div>
 
           {/* CTA */}
@@ -223,7 +172,7 @@ export function HomePage() {
           <div className="flex-shrink-0">
             <div className="relative">
               <div className="absolute inset-0 bg-accent/20 rounded-full blur-3xl scale-75" />
-              <SquirrelMascot className="w-64 h-64 md:w-80 md:h-80 relative z-10 drop-shadow-2xl" />
+              <SquickyMascot className="w-64 h-64 md:w-80 md:h-80 relative z-10 drop-shadow-2xl" />
             </div>
           </div>
         </div>

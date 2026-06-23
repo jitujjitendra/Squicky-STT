@@ -1,11 +1,11 @@
 /**
  * Speech Engine Module - Page Component (Premium Edition)
  *
- * The home page and primary entry point for the Squicky platform.
+ * AI-powered speech recognition upload and processing interface.
  * Orchestrates the upload zone, processing queue, job progress,
  * and transcription result views.
  *
- * Route: / (home)
+ * Route: /speech-engine
  *
  * Architecture decision: The page acts as a layout orchestrator,
  * composing specialized components and connecting them via shared

@@ -21,6 +21,7 @@
  */
 
 import { createHashRouter } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { MainLayout } from './layout';
 import { HomePage } from '@/modules/homepage';
 import { DashboardPage } from '@/modules/dashboard';
@@ -32,6 +33,25 @@ import { ContentStudioPage } from '@/modules/content-studio';
 import { MeetingIntelligencePage } from '@/modules/meeting-intelligence';
 import { CreatorStudioPage } from '@/modules/creator-studio';
 import { BusinessStudioPage } from '@/modules/business-studio';
+
+/** 404 Page - Shown for unmatched routes */
+function NotFoundPage() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4">
+      <h1 className="text-6xl font-bold text-accent mb-4">404</h1>
+      <p className="text-xl text-[var(--text-primary)] mb-2">Page not found</p>
+      <p className="text-[var(--text-secondary)] mb-8 max-w-md">
+        The page you're looking for doesn't exist or has been moved.
+      </p>
+      <Link
+        to="/dashboard"
+        className="px-6 py-3 rounded-full bg-accent text-white font-semibold hover:opacity-90 transition-opacity"
+      >
+        Go to Dashboard
+      </Link>
+    </div>
+  );
+}
 
 /**
  * Using createHashRouter for GitHub Pages compatibility.
@@ -81,6 +101,10 @@ export const router = createHashRouter([
       {
         path: '/business',
         element: <BusinessStudioPage />,
+      },
+      {
+        path: '*',
+        element: <NotFoundPage />,
       },
     ],
   },
